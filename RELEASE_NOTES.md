@@ -1,24 +1,34 @@
-# Slim Monitor PC v0.2.3
+# Slim Monitor PC v0.2.4
 
-Taskbar-visibility and fullscreen-behavior update.
+Native taskbar-integration update focused on eliminating flicker and making the monitor behave as part of Windows instead of as a floating overlay.
 
-## Fixed
+## Main change
 
-- Slim Monitor PC now disappears automatically when the Windows taskbar is hidden.
-- Fullscreen games and applications are detected, so the taskbar overlay no longer stays on top of gameplay.
-- The block comes back automatically when the taskbar/desktop becomes available again.
-- Removed the repeated `SWP_SHOWWINDOW` forcing that caused a visible blink when using Windows **Show desktop**.
-- Z-order is now refreshed without forcing the window visible, and only while the taskbar should be shown.
-- The built-in calendar closes automatically when a fullscreen application takes over or the taskbar hides.
+- Slim Monitor PC is now attached as a child of the Windows `Shell_TrayWnd` taskbar.
+- It is no longer a separate `TopMost` window fighting the Z-order when you change windows or press **Show desktop**.
+- Because it belongs to the taskbar, it naturally follows taskbar visibility and cannot remain floating above a fullscreen game when the taskbar is behind/hidden.
 
-## Preserved from v0.2.2
+## Layout
 
-- Larger time and date.
-- Correct physical-pixel/DPI positioning.
-- The block stays clear of Wi-Fi, volume, battery and other tray icons.
+- The unified traffic + time/date block is narrower than v0.2.3.
+- Extra left spacing creates a clearer gap from the battery, volume and Wi-Fi icons.
+- Time/date remain visually dominant and the full `dd/MM/yyyy` date is retained.
 - The far-right **Show desktop** strip remains free.
-- **Start with Windows**, Wi-Fi traffic measurement and the built-in calendar remain available.
 
-## Validation
+## Information menu
 
-The Windows CI pipeline still requires the single-file executable to pass its startup self-test and embedded-icon verification before publication.
+- The hover tooltip has been removed completely.
+- Right-click now shows:
+  - active Wi-Fi adapter,
+  - current download speed,
+  - current upload speed,
+  - received data since launch,
+  - sent data since launch,
+  - calendar, Start with Windows, realign and exit actions.
+
+## Preserved
+
+- Built-in Windows-style calendar on left click.
+- Start with Windows.
+- Single-file, self-contained Windows x64 executable.
+- Startup self-test and embedded-icon validation in CI.
