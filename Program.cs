@@ -30,14 +30,14 @@ internal static class Program
 
             if (selfTest)
             {
-                using var form = new TaskbarEmbeddedForm();
+                using var form = new TaskbarOverlayForm();
                 _ = form.Handle;
                 return;
             }
 
             Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
             Application.ThreadException += (_, e) => ReportFatal(e.Exception, showDialog: true);
-            Application.Run(new TaskbarEmbeddedForm());
+            Application.Run(new TaskbarOverlayForm());
         }
         catch (Exception ex)
         {
