@@ -1,8 +1,11 @@
 # Slim Monitor PC
 
-A tiny Windows 10/11 Wi-Fi traffic meter that shows live download and upload speed beside the notification area of the taskbar.
+A tiny Windows 10/11 Wi-Fi traffic meter that shows live download and upload speed directly on the taskbar.
 
-`↓ 3.8 MB/s   ↑ 420 KB/s`
+```text
+↓ 3.8 MB/s
+↑ 420 KB/s
+```
 
 ## English
 
@@ -12,10 +15,12 @@ A tiny Windows 10/11 Wi-Fi traffic meter that shows live download and upload spe
 - Updates every second.
 - Automatic B/s, KB/s, MB/s and GB/s units.
 - Uses Windows network-interface counters: no packet capture, no extra driver and no administrator rights.
-- Sits beside the taskbar notification area without appearing as a normal taskbar/Alt+Tab window.
+- Uses a very compact two-line layout (`↓` download / `↑` upload) directly on the taskbar.
+- Drag it with the left mouse button to place it anywhere along the taskbar, even over existing taskbar icons. The position is remembered.
+- Does not appear as a normal taskbar/Alt+Tab window.
 - Adapts to the Windows light/dark taskbar theme.
 - Hover tooltip shows data received/sent since the app started.
-- Right-click menu includes **Start with Windows**, reposition and exit.
+- Right-click menu includes **Start with Windows**, reset position and exit.
 - Single-instance protection.
 - Distributed as one portable, self-contained Windows x64 EXE with its icon embedded.
 
@@ -40,13 +45,18 @@ The project publishes for `win-x64`, self-contained and single-file. The resulti
 
 ### Windows taskbar note
 
-Windows 11 does not provide a modern public API for third-party apps to become native taskbar modules. Slim Monitor PC therefore uses a small borderless, non-activating window positioned immediately before the notification area. It does not modify Explorer.
+Windows 11 does not provide a modern public API for third-party apps to become native taskbar modules. Slim Monitor PC therefore uses a small borderless, non-activating window layered above the taskbar. It can be dragged along the taskbar without modifying Explorer.
 
 ---
 
 ## Español
 
-Medidor mínimo de tráfico Wi-Fi para Windows 10/11 que muestra en tiempo real la velocidad de descarga y subida junto al área de notificaciones de la barra de tareas.
+Medidor mínimo de tráfico Wi-Fi para Windows 10/11 que muestra en tiempo real la velocidad de descarga y subida directamente sobre la barra de tareas.
+
+```text
+↓ 3.8 MB/s
+↑ 420 KB/s
+```
 
 ### Funciones
 
@@ -54,10 +64,12 @@ Medidor mínimo de tráfico Wi-Fi para Windows 10/11 que muestra en tiempo real 
 - Actualización cada segundo.
 - Unidades automáticas B/s, KB/s, MB/s y GB/s.
 - Usa los contadores de interfaz de Windows: no captura paquetes, no instala drivers y no necesita permisos de administrador.
-- Se coloca junto al área de notificaciones sin aparecer como una ventana normal en la barra de tareas ni en Alt+Tab.
+- Diseño más compacto en dos líneas (`↓` descarga / `↑` subida).
+- Se puede arrastrar con el botón izquierdo a cualquier punto de la barra, incluso sobre otros iconos; recuerda la posición.
+- No aparece como una ventana normal en la barra de tareas ni en Alt+Tab.
 - Se adapta al tema claro/oscuro de Windows.
 - Al pasar el ratón muestra los datos recibidos/enviados desde que se abrió la aplicación.
-- Menú con clic derecho: **Iniciar con Windows**, recolocar y salir.
+- Menú con clic derecho: **Iniciar con Windows**, restablecer posición y salir.
 - Evita abrir varias instancias a la vez.
 - Se distribuye como un único EXE portátil y autocontenido para Windows x64, con el icono integrado.
 
