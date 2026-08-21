@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Drawing;
+using System.Globalization;
 using System.Linq;
 using System.Net.NetworkInformation;
 using System.Runtime.InteropServices;
@@ -13,13 +14,9 @@ public sealed class MainForm : Form
     private const string AppName = "Slim Monitor PC";
     private const string RunKeyPath = @"Software\Microsoft\Windows\CurrentVersion\Run";
     private const string RunValueName = "SlimMonitorPC";
-    private const string SettingsKeyPath = @"Software\IMC93Labs\SlimMonitorPC";
-    private const string PositionValueName = "TaskbarOffset";
-    private const int PreferredWidth = 96;
 
     private readonly System.Windows.Forms.Timer _timer;
     private readonly System.Windows.Forms.Timer _zOrderTimer;
-    private readonly Label _speedLabel;
     private readonly ToolTip _toolTip;
     private readonly ContextMenuStrip _menu;
     private readonly ToolStripMenuItem _adapterItem;
@@ -32,10 +29,10 @@ public sealed class MainForm : Form
     private long _sessionReceived;
     private long _sessionSent;
     private DateTime _lastSampleUtc;
-
-    private bool _dragging;
-    private Point _dragStartCursor;
-    private Point _dragStartLocation;
+    private double _rxPerSecond;
+    private double _txPerSecond;
+    private CalendarPopup? _calendar;
+    private Rectangle _taskbarRect;
 
     public MainForm()
     {
@@ -48,8 +45,9 @@ public sealed class MainForm : Form
         MinimizeBox = false;
         ControlBox = false;
         AutoScaleMode = AutoScaleMode.Dpi;
-        Padding = new Padding(3, 0, 2, 0);
-        Cursor = Cursors.SizeAll;
+        Padding = Padding.Empty;
+        Cursor = Cursors.Hand;
+        DoubleBuffered = true;
 
         try
         {
@@ -57,30 +55,17 @@ public sealed class MainForm : Form
         }
         catch
         {
-            // The executable already contains the application icon; this is only cosmetic.
+            // The icon is already embedded into the executable.
         }
 
         ApplyTheme();
-
-        _speedLabel = new Label
-        {
-            AutoSize = false,
-            Dock = DockStyle.Fill,
-            TextAlign = ContentAlignment.MiddleLeft,
-            Text = "↓ —\n↑ —",
-            Font = new Font("Segoe UI", 8.0f, FontStyle.Regular, GraphicsUnit.Point),
-            BackColor = Color.Transparent,
-            ForeColor = ForeColor,
-            UseMnemonic = false,
-            Cursor = Cursors.SizeAll
-        };
-        Controls.Add(_speedLabel);
 
         _toolTip = new ToolTip
         {
             AutoPopDelay = 10000,
             InitialDelay = 250,
-            ReshowDelay = 100
+            ReshowDelay = 100,
+            ShowAlways = true
         };
 
         _menu = new ContextMenuStrip();
@@ -92,38 +77,33 @@ public sealed class MainForm : Form
         };
         _startupItem.CheckedChanged += StartupItem_CheckedChanged;
 
-        var resetPositionItem = new ToolStripMenuItem("Restablecer posición");
-        resetPositionItem.Click += (_, _) =>
-        {
-            ClearSavedTaskbarOffset();
-            PositionOnTaskbar(useSavedPosition: false);
-        };
+        var calendarItem = new ToolStripMenuItem("Abrir calendario");
+        calendarItem.Click += (_, _) => ToggleCalendar();
+
+        var repositionItem = new ToolStripMenuItem("Reajustar a la barra de tareas");
+        repositionItem.Click += (_, _) => PositionOnTaskbar();
 
         var exitItem = new ToolStripMenuItem("Salir");
         exitItem.Click += (_, _) => Close();
 
         _menu.Items.Add(_adapterItem);
         _menu.Items.Add(new ToolStripSeparator());
+        _menu.Items.Add(calendarItem);
         _menu.Items.Add(_startupItem);
-        _menu.Items.Add(resetPositionItem);
+        _menu.Items.Add(repositionItem);
         _menu.Items.Add(new ToolStripSeparator());
         _menu.Items.Add(exitItem);
-
         ContextMenuStrip = _menu;
-        _speedLabel.ContextMenuStrip = _menu;
 
-        MouseDown += Drag_MouseDown;
-        MouseMove += Drag_MouseMove;
-        MouseUp += Drag_MouseUp;
-        _speedLabel.MouseDown += Drag_MouseDown;
-        _speedLabel.MouseMove += Drag_MouseMove;
-        _speedLabel.MouseUp += Drag_MouseUp;
+        MouseUp += MainForm_MouseUp;
 
         _timer = new System.Windows.Forms.Timer { Interval = 1000 };
-        _timer.Tick += (_, _) => UpdateNetworkSpeed();
+        _timer.Tick += (_, _) =>
+        {
+            UpdateNetworkSpeed();
+            Invalidate();
+        };
 
-        // Explorer/taskbar can move itself above other top-most windows after a click.
-        // Reasserting only the Z-order keeps the meter visible without moving it.
         _zOrderTimer = new System.Windows.Forms.Timer { Interval = 250 };
         _zOrderTimer.Tick += (_, _) => EnsureAboveTaskbar();
 
@@ -132,10 +112,11 @@ public sealed class MainForm : Form
 
         Shown += (_, _) =>
         {
-            PositionOnTaskbar(useSavedPosition: true);
+            PositionOnTaskbar();
             ResetAdapter();
             UpdateNetworkSpeed();
             EnsureAboveTaskbar();
+            UpdateTooltip();
             _timer.Start();
             _zOrderTimer.Start();
         };
@@ -155,10 +136,71 @@ public sealed class MainForm : Form
         }
     }
 
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        base.OnPaint(e);
+        var g = e.Graphics;
+        g.Clear(BackColor);
+
+        var scale = DeviceDpi / 96f;
+        var outerPad = Math.Max(4, (int)Math.Round(6 * scale));
+        var gap = Math.Max(3, (int)Math.Round(5 * scale));
+        var rowHeight = ClientSize.Height / 2;
+
+        var networkWidth = Math.Clamp((int)Math.Round(ClientSize.Width * 0.43), ScalePx(54), ScalePx(76));
+        var clockWidth = ClientSize.Width - outerPad * 2 - gap - networkWidth;
+        if (clockWidth < ScalePx(58))
+        {
+            var shortage = ScalePx(58) - clockWidth;
+            networkWidth = Math.Max(ScalePx(48), networkWidth - shortage);
+            clockWidth = ClientSize.Width - outerPad * 2 - gap - networkWidth;
+        }
+
+        var networkRect = new Rectangle(outerPad, 0, networkWidth, ClientSize.Height);
+        var clockRect = new Rectangle(networkRect.Right + gap, 0, Math.Max(1, clockWidth), ClientSize.Height);
+
+        using var clockFont = new Font("Segoe UI", 8.5f, FontStyle.Regular, GraphicsUnit.Point);
+        using var rateFont = new Font("Segoe UI", 7.7f, FontStyle.Regular, GraphicsUnit.Point);
+
+        var time = DateTime.Now.ToString("t", CultureInfo.CurrentCulture);
+        var date = DateTime.Now.ToString("d", CultureInfo.CurrentCulture);
+
+        var topClock = new Rectangle(clockRect.Left, 0, clockRect.Width, rowHeight);
+        var bottomClock = new Rectangle(clockRect.Left, rowHeight, clockRect.Width, ClientSize.Height - rowHeight);
+        var topNetwork = new Rectangle(networkRect.Left, 0, networkRect.Width, rowHeight);
+        var bottomNetwork = new Rectangle(networkRect.Left, rowHeight, networkRect.Width, ClientSize.Height - rowHeight);
+
+        var baseFlags = TextFormatFlags.NoPadding | TextFormatFlags.SingleLine | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix;
+        TextRenderer.DrawText(g, time, clockFont, topClock, ForeColor, baseFlags | TextFormatFlags.Right);
+        TextRenderer.DrawText(g, date, clockFont, bottomClock, ForeColor, baseFlags | TextFormatFlags.Right);
+
+        DrawRate(g, topNetwork, $"↓ {FormatRate(_rxPerSecond)}", rateFont, baseFlags);
+        DrawRate(g, bottomNetwork, $"↑ {FormatRate(_txPerSecond)}", rateFont, baseFlags);
+    }
+
+    private void DrawRate(Graphics g, Rectangle bounds, string text, Font initialFont, TextFormatFlags flags)
+    {
+        var font = initialFont;
+        Font? smaller = null;
+        var measured = TextRenderer.MeasureText(g, text, font, Size.Empty, flags);
+        if (measured.Width > bounds.Width)
+        {
+            var ratio = Math.Max(0.72f, (float)bounds.Width / Math.Max(1, measured.Width));
+            smaller = new Font(font.FontFamily, Math.Max(6.2f, font.Size * ratio), font.Style, GraphicsUnit.Point);
+            font = smaller;
+        }
+
+        TextRenderer.DrawText(g, text, font, bounds, ForeColor, flags | TextFormatFlags.Left);
+        smaller?.Dispose();
+    }
+
+    private int ScalePx(int value) => Math.Max(1, (int)Math.Round(value * DeviceDpi / 96f));
+
     protected override void OnFormClosed(FormClosedEventArgs e)
     {
         _timer.Stop();
         _zOrderTimer.Stop();
+        _calendar?.Close();
         SystemEvents.DisplaySettingsChanged -= SystemEvents_DisplaySettingsChanged;
         SystemEvents.UserPreferenceChanged -= SystemEvents_UserPreferenceChanged;
         _menu.Dispose();
@@ -166,10 +208,41 @@ public sealed class MainForm : Form
         base.OnFormClosed(e);
     }
 
+    private void MainForm_MouseUp(object? sender, MouseEventArgs e)
+    {
+        if (e.Button == MouseButtons.Left)
+            ToggleCalendar();
+    }
+
+    private void ToggleCalendar()
+    {
+        if (_calendar is { IsDisposed: false, Visible: true })
+        {
+            _calendar.Close();
+            _calendar = null;
+            EnsureAboveTaskbar();
+            return;
+        }
+
+        _calendar?.Dispose();
+        _calendar = new CalendarPopup(IsSystemLightTheme());
+        _calendar.FormClosed += (_, _) =>
+        {
+            _calendar = null;
+            EnsureAboveTaskbar();
+        };
+
+        _calendar.ShowNear(Bounds, _taskbarRect);
+    }
+
     private void SystemEvents_DisplaySettingsChanged(object? sender, EventArgs e)
     {
         if (IsHandleCreated)
-            BeginInvoke((Action)(() => PositionOnTaskbar(useSavedPosition: true)));
+            BeginInvoke((Action)(() =>
+            {
+                _calendar?.Close();
+                PositionOnTaskbar();
+            }));
     }
 
     private void SystemEvents_UserPreferenceChanged(object sender, UserPreferenceChangedEventArgs e)
@@ -179,53 +252,11 @@ public sealed class MainForm : Form
 
         BeginInvoke((Action)(() =>
         {
+            _calendar?.Close();
             ApplyTheme();
-            _speedLabel.ForeColor = ForeColor;
-            PositionOnTaskbar(useSavedPosition: true);
+            PositionOnTaskbar();
+            Invalidate();
         }));
-    }
-
-    private void Drag_MouseDown(object? sender, MouseEventArgs e)
-    {
-        if (e.Button != MouseButtons.Left)
-            return;
-
-        _dragging = true;
-        _dragStartCursor = Cursor.Position;
-        _dragStartLocation = Location;
-        Capture = true;
-        _speedLabel.Capture = true;
-        EnsureAboveTaskbar();
-    }
-
-    private void Drag_MouseMove(object? sender, MouseEventArgs e)
-    {
-        if (!_dragging || e.Button != MouseButtons.Left)
-            return;
-
-        var cursor = Cursor.Position;
-        var proposed = new Point(
-            _dragStartLocation.X + cursor.X - _dragStartCursor.X,
-            _dragStartLocation.Y + cursor.Y - _dragStartCursor.Y);
-
-        MoveWithinTaskbar(proposed);
-        EnsureAboveTaskbar();
-    }
-
-    private void Drag_MouseUp(object? sender, MouseEventArgs e)
-    {
-        if (e.Button != MouseButtons.Left)
-            return;
-
-        if (_dragging)
-        {
-            _dragging = false;
-            Capture = false;
-            _speedLabel.Capture = false;
-            SaveTaskbarOffset();
-        }
-
-        EnsureAboveTaskbar();
     }
 
     private void UpdateNetworkSpeed()
@@ -237,9 +268,10 @@ public sealed class MainForm : Form
             {
                 _adapter = null;
                 _adapterId = null;
-                _speedLabel.Text = "↓ —\n↑ —";
+                _rxPerSecond = 0;
+                _txPerSecond = 0;
                 _adapterItem.Text = "Wi-Fi: sin conexión";
-                _toolTip.SetToolTip(_speedLabel, "Wi-Fi sin conexión\nArrastra con el botón izquierdo para mover\nClic derecho: opciones");
+                UpdateTooltip();
                 return;
             }
 
@@ -252,9 +284,10 @@ public sealed class MainForm : Form
                 _lastSent = initial.BytesSent;
                 _sessionReceived = 0;
                 _sessionSent = 0;
+                _rxPerSecond = 0;
+                _txPerSecond = 0;
                 _lastSampleUtc = DateTime.UtcNow;
                 _adapterItem.Text = $"Wi-Fi: {FriendlyAdapterName(current)}";
-                _speedLabel.Text = "↓ 0 KB/s\n↑ 0 KB/s";
                 UpdateTooltip();
                 return;
             }
@@ -269,21 +302,20 @@ public sealed class MainForm : Form
 
             _sessionReceived += rxDelta;
             _sessionSent += txDelta;
-
-            var rxPerSecond = rxDelta / elapsed;
-            var txPerSecond = txDelta / elapsed;
+            _rxPerSecond = rxDelta / elapsed;
+            _txPerSecond = txDelta / elapsed;
 
             _lastReceived = stats.BytesReceived;
             _lastSent = stats.BytesSent;
             _lastSampleUtc = now;
 
-            _speedLabel.Text = $"↓ {FormatRate(rxPerSecond)}\n↑ {FormatRate(txPerSecond)}";
             _adapterItem.Text = $"Wi-Fi: {FriendlyAdapterName(current)}";
             UpdateTooltip();
         }
         catch
         {
-            _speedLabel.Text = "↓ —\n↑ —";
+            _rxPerSecond = 0;
+            _txPerSecond = 0;
         }
     }
 
@@ -295,6 +327,8 @@ public sealed class MainForm : Form
         _lastSent = 0;
         _sessionReceived = 0;
         _sessionSent = 0;
+        _rxPerSecond = 0;
+        _txPerSecond = 0;
         _lastSampleUtc = DateTime.UtcNow;
     }
 
@@ -308,7 +342,6 @@ public sealed class MainForm : Form
         if (wifi is not null)
             return wifi;
 
-        // Fallback for drivers that do not report Wireless80211 correctly.
         return adapters.FirstOrDefault(n =>
         {
             var text = $"{n.Name} {n.Description}".ToLowerInvariant();
@@ -324,15 +357,22 @@ public sealed class MainForm : Form
 
     private void UpdateTooltip()
     {
+        string text;
         if (_adapter is null)
-            return;
-
-        var text = $"{FriendlyAdapterName(_adapter)}\n" +
+        {
+            text = "Wi-Fi sin conexión\nClic: calendario\nClic derecho: opciones";
+        }
+        else
+        {
+            text = $"{FriendlyAdapterName(_adapter)}\n" +
+                   $"Descarga actual: {FormatRate(_rxPerSecond)}\n" +
+                   $"Subida actual: {FormatRate(_txPerSecond)}\n" +
                    $"Recibido desde que se abrió: {FormatBytes(_sessionReceived)}\n" +
                    $"Enviado desde que se abrió: {FormatBytes(_sessionSent)}\n" +
-                   "Arrastra con el botón izquierdo para mover\n" +
-                   "Clic derecho: opciones";
-        _toolTip.SetToolTip(_speedLabel, text);
+                   "Clic: calendario\nClic derecho: opciones";
+        }
+
+        _toolTip.SetToolTip(this, text);
     }
 
     private static string FormatRate(double bytesPerSecond)
@@ -363,7 +403,7 @@ public sealed class MainForm : Form
         return $"{gb:0.00} GB";
     }
 
-    private void PositionOnTaskbar(bool useSavedPosition)
+    private void PositionOnTaskbar()
     {
         if (!IsHandleCreated)
             return;
@@ -371,54 +411,55 @@ public sealed class MainForm : Form
         if (!TryGetTaskbarRect(out var taskbarRect))
         {
             var area = Screen.PrimaryScreen?.WorkingArea ?? new Rectangle(0, 0, 1920, 1080);
+            var fallbackHeight = ScalePx(40);
+            var fallbackWidth = ScalePx(144);
+            _taskbarRect = Rectangle.FromLTRB(area.Left, area.Bottom, area.Right, area.Bottom + fallbackHeight);
             NativeMethods.SetWindowPos(
                 Handle,
                 NativeMethods.HWND_TOPMOST,
-                area.Right - PreferredWidth - 12,
-                area.Bottom - 32,
-                PreferredWidth,
-                30,
+                area.Right - fallbackWidth - ScalePx(6),
+                area.Bottom,
+                fallbackWidth,
+                fallbackHeight,
                 NativeMethods.SWP_NOACTIVATE | NativeMethods.SWP_SHOWWINDOW);
             return;
         }
 
+        _taskbarRect = taskbarRect;
         var horizontal = taskbarRect.Width >= taskbarRect.Height;
-        int width;
-        int height;
-        int x;
-        int y;
-
-        if (horizontal)
+        if (!horizontal)
         {
-            width = PreferredWidth;
-            height = Math.Clamp(taskbarRect.Height - 8, 28, 34);
-            y = taskbarRect.Top + (taskbarRect.Height - height) / 2;
+            var verticalWidth = Math.Max(ScalePx(48), taskbarRect.Width - ScalePx(4));
+            var verticalHeight = Math.Min(ScalePx(84), taskbarRect.Height - ScalePx(8));
+            NativeMethods.SetWindowPos(
+                Handle,
+                NativeMethods.HWND_TOPMOST,
+                taskbarRect.Left + (taskbarRect.Width - verticalWidth) / 2,
+                taskbarRect.Bottom - verticalHeight - ScalePx(6),
+                verticalWidth,
+                verticalHeight,
+                NativeMethods.SWP_NOACTIVATE | NativeMethods.SWP_SHOWWINDOW);
+            return;
+        }
 
-            var savedOffset = useSavedPosition ? LoadSavedTaskbarOffset() : null;
-            if (savedOffset.HasValue)
-            {
-                x = Math.Clamp(taskbarRect.Left + savedOffset.Value, taskbarRect.Left, taskbarRect.Right - width);
-            }
-            else
-            {
-                var tray = NativeMethods.FindWindowEx(NativeMethods.FindWindow("Shell_TrayWnd", null), IntPtr.Zero, "TrayNotifyWnd", null);
-                if (tray != IntPtr.Zero && NativeMethods.GetWindowRect(tray, out var trayRect))
-                    x = Math.Max(taskbarRect.Left + 4, trayRect.Left - width - 4);
-                else
-                    x = Math.Max(taskbarRect.Left + 4, taskbarRect.Right - width - 250);
-            }
+        var showDesktopStrip = Math.Clamp(taskbarRect.Height / 8, ScalePx(4), ScalePx(9));
+        var right = taskbarRect.Right - showDesktopStrip;
+
+        var clockRect = TryGetClockRect();
+        int width;
+        if (clockRect.HasValue && clockRect.Value.Width > 0)
+        {
+            width = clockRect.Value.Width + Math.Clamp(taskbarRect.Height - ScalePx(4), ScalePx(34), ScalePx(54));
         }
         else
         {
-            width = Math.Clamp(taskbarRect.Width - 6, 46, PreferredWidth);
-            height = 32;
-            x = taskbarRect.Left + (taskbarRect.Width - width) / 2;
-
-            var savedOffset = useSavedPosition ? LoadSavedTaskbarOffset() : null;
-            y = savedOffset.HasValue
-                ? Math.Clamp(taskbarRect.Top + savedOffset.Value, taskbarRect.Top, taskbarRect.Bottom - height)
-                : Math.Max(taskbarRect.Top + 4, taskbarRect.Bottom - height - 110);
+            width = (int)Math.Round(taskbarRect.Height * 3.0);
         }
+
+        width = Math.Clamp(width, ScalePx(126), ScalePx(168));
+        var height = Math.Max(ScalePx(32), taskbarRect.Height - ScalePx(2));
+        var x = Math.Max(taskbarRect.Left, right - width);
+        var y = taskbarRect.Top + (taskbarRect.Height - height) / 2;
 
         NativeMethods.SetWindowPos(
             Handle,
@@ -430,37 +471,28 @@ public sealed class MainForm : Form
             NativeMethods.SWP_NOACTIVATE | NativeMethods.SWP_SHOWWINDOW);
     }
 
-    private void MoveWithinTaskbar(Point proposedLocation)
+    private static Rectangle? TryGetClockRect()
     {
-        if (!TryGetTaskbarRect(out var taskbarRect))
-        {
-            Location = proposedLocation;
-            return;
-        }
+        var taskbar = NativeMethods.FindWindow("Shell_TrayWnd", null);
+        if (taskbar == IntPtr.Zero)
+            return null;
 
-        var horizontal = taskbarRect.Width >= taskbarRect.Height;
-        int x;
-        int y;
-
-        if (horizontal)
+        IntPtr found = IntPtr.Zero;
+        NativeMethods.EnumChildWindows(taskbar, (hwnd, _) =>
         {
-            x = Math.Clamp(proposedLocation.X, taskbarRect.Left, taskbarRect.Right - Width);
-            y = taskbarRect.Top + (taskbarRect.Height - Height) / 2;
-        }
-        else
-        {
-            x = taskbarRect.Left + (taskbarRect.Width - Width) / 2;
-            y = Math.Clamp(proposedLocation.Y, taskbarRect.Top, taskbarRect.Bottom - Height);
-        }
+            var className = NativeMethods.GetClassName(hwnd);
+            if (className.Equals("TrayClockWClass", StringComparison.OrdinalIgnoreCase))
+            {
+                found = hwnd;
+                return false;
+            }
+            return true;
+        }, IntPtr.Zero);
 
-        NativeMethods.SetWindowPos(
-            Handle,
-            NativeMethods.HWND_TOPMOST,
-            x,
-            y,
-            Width,
-            Height,
-            NativeMethods.SWP_NOACTIVATE | NativeMethods.SWP_SHOWWINDOW);
+        if (found == IntPtr.Zero || !NativeMethods.GetWindowRect(found, out var rect))
+            return null;
+
+        return Rectangle.FromLTRB(rect.Left, rect.Top, rect.Right, rect.Bottom);
     }
 
     private void EnsureAboveTaskbar()
@@ -492,58 +524,15 @@ public sealed class MainForm : Form
         return rect.Width > 0 && rect.Height > 0;
     }
 
-    private void SaveTaskbarOffset()
-    {
-        try
-        {
-            if (!TryGetTaskbarRect(out var taskbarRect))
-                return;
-
-            var horizontal = taskbarRect.Width >= taskbarRect.Height;
-            var offset = horizontal ? Left - taskbarRect.Left : Top - taskbarRect.Top;
-            using var key = Registry.CurrentUser.CreateSubKey(SettingsKeyPath, writable: true);
-            key.SetValue(PositionValueName, offset, RegistryValueKind.DWord);
-        }
-        catch
-        {
-            // Position persistence is optional; dragging still works if the registry is unavailable.
-        }
-    }
-
-    private static int? LoadSavedTaskbarOffset()
-    {
-        try
-        {
-            using var key = Registry.CurrentUser.OpenSubKey(SettingsKeyPath);
-            return key?.GetValue(PositionValueName) is int offset ? offset : null;
-        }
-        catch
-        {
-            return null;
-        }
-    }
-
-    private static void ClearSavedTaskbarOffset()
-    {
-        try
-        {
-            using var key = Registry.CurrentUser.CreateSubKey(SettingsKeyPath, writable: true);
-            key.DeleteValue(PositionValueName, throwOnMissingValue: false);
-        }
-        catch
-        {
-            // Optional setting; no action required.
-        }
-    }
-
     private void ApplyTheme()
     {
         var light = IsSystemLightTheme();
         BackColor = light ? Color.FromArgb(243, 243, 243) : Color.FromArgb(32, 32, 32);
         ForeColor = light ? Color.FromArgb(20, 20, 20) : Color.FromArgb(245, 245, 245);
+        _menu.RenderMode = ToolStripRenderMode.System;
     }
 
-    private static bool IsSystemLightTheme()
+    internal static bool IsSystemLightTheme()
     {
         try
         {
@@ -601,7 +590,7 @@ public sealed class MainForm : Form
         }
     }
 
-    private static class NativeMethods
+    internal static class NativeMethods
     {
         internal static readonly IntPtr HWND_TOPMOST = new(-1);
         internal const uint SWP_NOSIZE = 0x0001;
@@ -609,11 +598,10 @@ public sealed class MainForm : Form
         internal const uint SWP_NOACTIVATE = 0x0010;
         internal const uint SWP_SHOWWINDOW = 0x0040;
 
-        [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-        internal static extern IntPtr FindWindow(string? lpClassName, string? lpWindowName);
+        internal delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
 
         [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-        internal static extern IntPtr FindWindowEx(IntPtr hWndParent, IntPtr hWndChildAfter, string? lpszClass, string? lpszWindow);
+        internal static extern IntPtr FindWindow(string? lpClassName, string? lpWindowName);
 
         [DllImport("user32.dll", SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
@@ -622,6 +610,19 @@ public sealed class MainForm : Form
         [DllImport("user32.dll", SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
         internal static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
+
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        internal static extern bool EnumChildWindows(IntPtr hWndParent, EnumWindowsProc lpEnumFunc, IntPtr lParam);
+
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+        private static extern int GetClassName(IntPtr hWnd, System.Text.StringBuilder lpClassName, int nMaxCount);
+
+        internal static string GetClassName(IntPtr hWnd)
+        {
+            var builder = new System.Text.StringBuilder(256);
+            return GetClassName(hWnd, builder, builder.Capacity) > 0 ? builder.ToString() : string.Empty;
+        }
 
         [StructLayout(LayoutKind.Sequential)]
         internal struct RECT
