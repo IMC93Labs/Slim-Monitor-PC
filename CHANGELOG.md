@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.2.2 — 2026-08-21
+
+- Fix the unified taskbar block becoming too wide on displays using Windows DPI scaling.
+- Stop applying DPI scaling twice to physical taskbar coordinates returned by Windows.
+- Keep the overlay inside the clock/date area so it no longer covers Wi-Fi, Bluetooth or other tray icons.
+- Keep the far-right **Show desktop** strip free.
+- Increase the clock and date font sizes for better readability.
+- Reduce the network-rate column slightly so traffic information stays secondary to time/date.
+- Keep the v0.2.1 startup self-test and embedded-icon validation.
+
 ## 0.2.1 — 2026-08-21
 
 - Fix the v0.2.0 startup crash that closed the app before anything appeared on the taskbar.
