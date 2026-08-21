@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.2.4 — 2026-08-21
+
+- Rework taskbar integration so the monitor is a native child of `Shell_TrayWnd` instead of a separate `TopMost` window.
+- Eliminate the window-switch / **Show desktop** flicker caused by repeatedly fighting Windows Z-order.
+- Make the monitor follow the taskbar naturally: if the taskbar hides or a fullscreen game covers it, Slim Monitor PC no longer remains above the game.
+- Remove the hover tooltip completely.
+- Move Wi-Fi adapter, current download/upload rate and session received/sent totals into the right-click menu.
+- Narrow the unified block and add extra left spacing so it sits farther away from the battery/volume/Wi-Fi icons.
+- Keep the larger time/date, full `dd/MM/yyyy` date, custom calendar and Start with Windows behavior.
+
 ## 0.2.3 — 2026-08-21
 
 - Hide Slim Monitor PC whenever the Windows taskbar is not actually visible, including auto-hide states.
