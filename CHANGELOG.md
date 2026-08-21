@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.2.6 — 2026-08-21
+
+- Increase the unified block slightly so it fully covers the native Windows clock/date underneath instead of leaving part of the original date visible.
+- Use the full taskbar height while preserving the far-right **Show desktop** strip.
+- Recover automatically if Windows **Show desktop** hides or moves the overlay behind the desktop.
+- Repair Z-order only when the overlay is actually no longer frontmost, avoiding continuous Z-order fighting during normal window changes.
+- Compare the Explorer process ID at the taskbar probe so Windows 11 XAML taskbar surfaces are treated correctly even when their root window is not `Shell_TrayWnd`.
+- Keep fullscreen coverage detection so the overlay can still hide when another process really covers the taskbar.
+- Recenter the two arrows in the generated application icon.
+
 ## 0.2.5 — 2026-08-21
 
 - Revert the v0.2.4 direct `Shell_TrayWnd` child embedding because it can be hidden by the Windows 11 XAML/composition taskbar.

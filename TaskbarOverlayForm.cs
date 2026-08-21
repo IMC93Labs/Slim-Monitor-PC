@@ -156,7 +156,7 @@ public sealed class TaskbarOverlayForm : Form
     {
         _layout.Dock = DockStyle.Fill;
         _layout.Margin = Padding.Empty;
-        _layout.Padding = new Padding(4, 0, 3, 0);
+        _layout.Padding = new Padding(5, 0, 4, 0);
         _layout.ColumnCount = 2;
         _layout.RowCount = 2;
         _layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 42f));
@@ -367,7 +367,7 @@ public sealed class TaskbarOverlayForm : Form
 
         if (!taskbarAvailable)
         {
-            if (_overlayShown)
+            if (_overlayShown || NativeMethods.IsWindowVisible(Handle))
             {
                 _overlayShown = false;
                 _calendar?.Close();
@@ -385,12 +385,31 @@ public sealed class TaskbarOverlayForm : Form
             _lastPositionedTaskbarRect = rect;
         }
 
-        if (!_overlayShown)
+        var nativeVisible = NativeMethods.IsWindowVisible(Handle) && !NativeMethods.IsIconic(Handle);
+        if (!_overlayShown || !nativeVisible)
         {
             PositionOnTaskbar(rect);
             _overlayShown = true;
             Opacity = 1;
             NativeMethods.ShowWindow(Handle, NativeMethods.SW_SHOWNOACTIVATE);
+            return;
+        }
+
+        // Windows' "Show desktop" can move the overlay behind the desktop without
+        // changing our logical state. Only repair Z-order when a point inside the
+        // overlay is no longer owned by this window; do not continuously fight Explorer.
+        if (!IsOverlayFrontmost())
+        {
+            NativeMethods.SetWindowPos(
+                Handle,
+                NativeMethods.HWND_TOPMOST,
+                0,
+                0,
+                0,
+                0,
+                NativeMethods.SWP_NOMOVE |
+                NativeMethods.SWP_NOSIZE |
+                NativeMethods.SWP_NOACTIVATE);
         }
     }
 
@@ -413,11 +432,14 @@ public sealed class TaskbarOverlayForm : Form
 
         var taskbarHeight = taskbar.Height;
         var showDesktopStrip = Math.Clamp(taskbarHeight / 8, 5, 9);
-        var width = Math.Clamp((int)Math.Round(taskbarHeight * 3.0), 136, 146);
-        var insetY = Math.Clamp(taskbarHeight / 24, 1, 2);
-        var height = Math.Max(30, taskbarHeight - insetY * 2);
+
+        // v0.2.5 was slightly too small and let part of the native Windows date
+        // remain visible underneath. Cover the whole native clock/date area while
+        // still leaving the far-right Show desktop strip untouched.
+        var width = Math.Clamp((int)Math.Round(taskbarHeight * 3.30), 150, 160);
+        var height = taskbarHeight;
         var x = Math.Max(taskbar.Left, taskbar.Right - showDesktopStrip - width);
-        var y = taskbar.Top + insetY;
+        var y = taskbar.Top;
 
         NativeMethods.SetWindowPos(
             Handle,
@@ -427,6 +449,19 @@ public sealed class TaskbarOverlayForm : Form
             width,
             height,
             NativeMethods.SWP_NOACTIVATE);
+    }
+
+    private bool IsOverlayFrontmost()
+    {
+        if (!IsHandleCreated || !NativeMethods.IsWindowVisible(Handle) || Width <= 0 || Height <= 0)
+            return false;
+
+        var point = new NativeMethods.POINT(Left + Math.Max(1, Width / 2), Top + Math.Max(1, Height / 2));
+        var hit = NativeMethods.WindowFromPoint(point);
+        if (hit == IntPtr.Zero)
+            return false;
+
+        return NativeMethods.GetAncestor(hit, NativeMethods.GA_ROOT) == Handle;
     }
 
     private static bool TryGetTaskbarRect(IntPtr taskbar, out Rectangle rect)
@@ -463,8 +498,13 @@ public sealed class TaskbarOverlayForm : Form
         if (hit == IntPtr.Zero)
             return false;
 
-        var root = NativeMethods.GetAncestor(hit, NativeMethods.GA_ROOT);
-        return root == taskbar;
+        // Windows 11 can host parts of the taskbar in separate XAML island windows.
+        // They may not have Shell_TrayWnd as GA_ROOT even though they belong to Explorer.
+        // Compare the owning process instead; a fullscreen game covering the taskbar will
+        // have a different PID, while Show desktop and normal taskbar transitions remain Explorer.
+        NativeMethods.GetWindowThreadProcessId(taskbar, out var taskbarProcessId);
+        NativeMethods.GetWindowThreadProcessId(hit, out var hitProcessId);
+        return taskbarProcessId != 0 && taskbarProcessId == hitProcessId;
     }
 
     private void ApplyTheme()
@@ -561,6 +601,8 @@ public sealed class TaskbarOverlayForm : Form
     private static class NativeMethods
     {
         internal static readonly IntPtr HWND_TOPMOST = new(-1);
+        internal const uint SWP_NOSIZE = 0x0001;
+        internal const uint SWP_NOMOVE = 0x0002;
         internal const uint SWP_NOACTIVATE = 0x0010;
         internal const int SW_HIDE = 0;
         internal const int SW_SHOWNOACTIVATE = 4;
@@ -572,6 +614,10 @@ public sealed class TaskbarOverlayForm : Form
         [DllImport("user32.dll")]
         [return: MarshalAs(UnmanagedType.Bool)]
         internal static extern bool IsWindowVisible(IntPtr hWnd);
+
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        internal static extern bool IsIconic(IntPtr hWnd);
 
         [DllImport("user32.dll", SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
@@ -590,6 +636,9 @@ public sealed class TaskbarOverlayForm : Form
 
         [DllImport("user32.dll")]
         internal static extern IntPtr GetAncestor(IntPtr hWnd, uint gaFlags);
+
+        [DllImport("user32.dll")]
+        internal static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
 
         [StructLayout(LayoutKind.Sequential)]
         internal readonly struct POINT

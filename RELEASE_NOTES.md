@@ -1,27 +1,25 @@
-# Slim Monitor PC v0.2.5
+# Slim Monitor PC v0.2.6
 
-Windows 11 compatibility hotfix after the v0.2.4 native-child approach proved invisible on the real target system.
+Taskbar layout and **Show desktop** recovery update based on real Windows 11 testing.
 
-## Main fix
+## Fixed
 
-- Removes the direct `Shell_TrayWnd` child-window embedding used by v0.2.4.
-- Restores a normal top-level tool window, but without the old foreground/fullscreen heuristic that caused constant hide/show flicker.
-- Taskbar visibility is now determined by probing the real **Show desktop** strip with `WindowFromPoint` and confirming that the topmost window at that point belongs to `Shell_TrayWnd`.
-- Normal maximized applications therefore keep Slim Monitor PC visible and stable.
-- Fullscreen games/apps that actually cover the taskbar make Slim Monitor PC hide automatically.
-- Auto-hidden/off-screen taskbar states also keep the monitor hidden.
+- The unified traffic/time/date block is slightly larger again so it fully covers the native Windows clock/date underneath instead of leaving part of the original date visible.
+- The block now uses the full taskbar height while still keeping the far-right **Show desktop** strip free.
+- Windows **Show desktop** can no longer leave Slim Monitor PC permanently hidden: the app now checks its real native visibility and repairs its Z-order only when Windows has actually moved it behind the desktop.
+- The taskbar-front detection now compares the owning Explorer process rather than requiring every Windows 11 XAML taskbar surface to have `Shell_TrayWnd` as its root window.
+- Normal window switching therefore does not trigger constant hide/show cycles, while a fullscreen game that really covers the taskbar can still hide the monitor.
 
-## Layout and information
+## Icon
 
-- Keeps the larger time and date introduced previously.
-- Narrows the total block further to create a clearer gap from battery, volume and Wi-Fi icons.
-- Keeps the far-right **Show desktop** strip free.
-- No hover tooltip is used.
-- Right-click shows active Wi-Fi adapter, current download/upload speed, session received/sent totals, calendar, Start with Windows, realign and exit actions.
+- Recentered the two upload/download arrows inside the executable icon so the symbol is visually centered instead of shifted to the right.
 
 ## Preserved
 
-- Built-in Windows-style calendar on left click.
+- Larger time and date.
+- No hover tooltip.
+- Right-click network/session information.
+- Built-in calendar on left click.
 - Start with Windows.
 - Single-file, self-contained Windows x64 executable.
 - Startup self-test and embedded-icon validation in CI.

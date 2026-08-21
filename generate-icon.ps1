@@ -29,27 +29,27 @@ $g.DrawPath($border, $path)
 
 $white = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(255, 245, 245, 245))
 
-# Upload arrow (left).
+# Upload arrow (left). The complete two-arrow symbol is centered at x=128.
 $up = [System.Drawing.Point[]]@(
-    (New-Object System.Drawing.Point(104, 62)),
-    (New-Object System.Drawing.Point(64, 116)),
-    (New-Object System.Drawing.Point(88, 116)),
-    (New-Object System.Drawing.Point(88, 178)),
-    (New-Object System.Drawing.Point(120, 178)),
-    (New-Object System.Drawing.Point(120, 116)),
-    (New-Object System.Drawing.Point(144, 116))
+    (New-Object System.Drawing.Point(88, 62)),
+    (New-Object System.Drawing.Point(48, 116)),
+    (New-Object System.Drawing.Point(72, 116)),
+    (New-Object System.Drawing.Point(72, 178)),
+    (New-Object System.Drawing.Point(104, 178)),
+    (New-Object System.Drawing.Point(104, 116)),
+    (New-Object System.Drawing.Point(128, 116))
 )
 $g.FillPolygon($white, $up)
 
 # Download arrow (right).
 $down = [System.Drawing.Point[]]@(
-    (New-Object System.Drawing.Point(168, 78)),
-    (New-Object System.Drawing.Point(168, 140)),
-    (New-Object System.Drawing.Point(144, 140)),
-    (New-Object System.Drawing.Point(184, 194)),
-    (New-Object System.Drawing.Point(224, 140)),
-    (New-Object System.Drawing.Point(200, 140)),
-    (New-Object System.Drawing.Point(200, 78))
+    (New-Object System.Drawing.Point(152, 78)),
+    (New-Object System.Drawing.Point(152, 140)),
+    (New-Object System.Drawing.Point(128, 140)),
+    (New-Object System.Drawing.Point(168, 194)),
+    (New-Object System.Drawing.Point(208, 140)),
+    (New-Object System.Drawing.Point(184, 140)),
+    (New-Object System.Drawing.Point(184, 78))
 )
 $g.FillPolygon($white, $down)
 
