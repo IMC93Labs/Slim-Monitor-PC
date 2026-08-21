@@ -354,11 +354,16 @@ public sealed class TaskbarOverlayForm : Form
             return;
 
         var taskbar = NativeMethods.FindWindow("Shell_TrayWnd", null);
-        var taskbarAvailable = taskbar != IntPtr.Zero &&
-                               NativeMethods.IsWindowVisible(taskbar) &&
-                               TryGetTaskbarRect(taskbar, out var rect) &&
-                               IsTaskbarOnScreen(rect) &&
+        var rect = Rectangle.Empty;
+        var taskbarAvailable = false;
+
+        if (taskbar != IntPtr.Zero &&
+            NativeMethods.IsWindowVisible(taskbar) &&
+            TryGetTaskbarRect(taskbar, out rect))
+        {
+            taskbarAvailable = IsTaskbarOnScreen(rect) &&
                                IsTaskbarFrontmostAtProbe(taskbar, rect);
+        }
 
         if (!taskbarAvailable)
         {
@@ -393,15 +398,15 @@ public sealed class TaskbarOverlayForm : Form
     {
         if (taskbar.Width < taskbar.Height)
         {
-            var width = Math.Max(42, taskbar.Width - 4);
-            var height = Math.Min(84, taskbar.Height - 8);
+            var verticalWidth = Math.Max(42, taskbar.Width - 4);
+            var verticalHeight = Math.Min(84, taskbar.Height - 8);
             NativeMethods.SetWindowPos(
                 Handle,
                 NativeMethods.HWND_TOPMOST,
-                taskbar.Left + Math.Max(0, (taskbar.Width - width) / 2),
-                taskbar.Bottom - height - 4,
-                width,
-                height,
+                taskbar.Left + Math.Max(0, (taskbar.Width - verticalWidth) / 2),
+                taskbar.Bottom - verticalHeight - 4,
+                verticalWidth,
+                verticalHeight,
                 NativeMethods.SWP_NOACTIVATE);
             return;
         }
