@@ -1,18 +1,18 @@
-# Slim Monitor PC v0.1.0
+# Slim Monitor PC v0.1.1
 
-First public release of **Slim Monitor PC**, a minimal Wi-Fi traffic meter designed to stay beside the Windows notification area.
+A compactness and interaction update focused on the Windows taskbar experience.
 
-## Highlights
+## Changes
 
-- Real-time download and upload speed: `↓ 3.8 MB/s   ↑ 420 KB/s`
-- Wi-Fi only; no packet capture and no additional network driver
-- Updates every second
-- Automatic B/s, KB/s, MB/s and GB/s formatting
-- Adapts to Windows light/dark taskbar theme
-- Tooltip with received/sent totals for the current session
-- Right-click menu with **Start with Windows**, reposition and exit controls
-- Portable, self-contained **single EXE** for Windows x64
+- Much narrower meter: approximately 96 px instead of 180 px.
+- Two-line display keeps download and upload easy to read in less space.
+- Drag the meter with the **left mouse button** to place it anywhere along the taskbar, including on top of taskbar icons.
+- The selected position is saved and restored on the next launch.
+- **Reset position** is available from the right-click menu.
+- Fixed the meter appearing to disappear after a click when Explorer/taskbar moved above it in the Z-order.
+- Left click never hides or closes the application.
+- Existing **Start with Windows** support is retained.
 
 ## Download
 
-Download `SlimMonitorPC.exe` from the release assets. No .NET installation is required on the destination PC.
+Download `SlimMonitorPC.exe` from the release assets. It is still a self-contained Windows x64 single-file executable and does not require a separate .NET installation.
