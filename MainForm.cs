@@ -429,15 +429,15 @@ public sealed class MainForm : Form
         var horizontal = taskbarRect.Width >= taskbarRect.Height;
         if (!horizontal)
         {
-            var width = Math.Max(ScalePx(48), taskbarRect.Width - ScalePx(4));
-            var height = Math.Min(ScalePx(84), taskbarRect.Height - ScalePx(8));
+            var verticalWidth = Math.Max(ScalePx(48), taskbarRect.Width - ScalePx(4));
+            var verticalHeight = Math.Min(ScalePx(84), taskbarRect.Height - ScalePx(8));
             NativeMethods.SetWindowPos(
                 Handle,
                 NativeMethods.HWND_TOPMOST,
-                taskbarRect.Left + (taskbarRect.Width - width) / 2,
-                taskbarRect.Bottom - height - ScalePx(6),
-                width,
-                height,
+                taskbarRect.Left + (taskbarRect.Width - verticalWidth) / 2,
+                taskbarRect.Bottom - verticalHeight - ScalePx(6),
+                verticalWidth,
+                verticalHeight,
                 NativeMethods.SWP_NOACTIVATE | NativeMethods.SWP_SHOWWINDOW);
             return;
         }
