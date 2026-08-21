@@ -1,0 +1,75 @@
+name: Build and publish release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Read version
+        id: version
+        shell: pwsh
+        run: |
+          $version = (Get-Content VERSION.txt -Raw).Trim()
+          "version=$version" >> $env:GITHUB_OUTPUT
+          "tag=v$version" >> $env:GITHUB_OUTPUT
+
+      - name: Restore
+        run: dotnet restore SlimMonitorPC.csproj
+
+      - name: Publish single-file EXE
+        run: >-
+          dotnet publish SlimMonitorPC.csproj
+          -c Release
+          -r win-x64
+          --self-contained true
+          -p:PublishSingleFile=true
+          -p:PublishTrimmed=false
+          -p:EnableCompressionInSingleFile=true
+          -o publish
+
+      - name: Prepare release files
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          Copy-Item publish\SlimMonitorPC.exe dist\SlimMonitorPC.exe
+          $hash = (Get-FileHash dist\SlimMonitorPC.exe -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  SlimMonitorPC.exe" | Set-Content dist\SHA256SUMS.txt -Encoding ascii
+          Get-Item dist\SlimMonitorPC.exe | Format-List Name,Length
+          Get-Content dist\SHA256SUMS.txt
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SlimMonitorPC-${{ steps.version.outputs.version }}-win-x64
+          path: dist/*
+          if-no-files-found: error
+
+      - name: Create or update GitHub Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          gh release view $env:TAG *> $null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create $env:TAG dist\SlimMonitorPC.exe dist\SHA256SUMS.txt --title "Slim Monitor PC v$env:VERSION" --notes-file RELEASE_NOTES.md --target $env:GITHUB_SHA
+          } else {
+            gh release upload $env:TAG dist\SlimMonitorPC.exe dist\SHA256SUMS.txt --clobber
+          }
