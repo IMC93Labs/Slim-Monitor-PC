@@ -141,15 +141,15 @@ public sealed class TaskbarMonitorForm : Form
         _layout.Padding = new Padding(5, 0, 5, 0);
         _layout.ColumnCount = 2;
         _layout.RowCount = 2;
-        _layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 53f));
-        _layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 47f));
+        _layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 48f));
+        _layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 52f));
         _layout.RowStyles.Add(new RowStyle(SizeType.Percent, 50f));
         _layout.RowStyles.Add(new RowStyle(SizeType.Percent, 50f));
 
-        ConfigureLabel(_download, ContentAlignment.MiddleLeft, 7.8f);
-        ConfigureLabel(_upload, ContentAlignment.MiddleLeft, 7.8f);
-        ConfigureLabel(_time, ContentAlignment.MiddleRight, 8.5f);
-        ConfigureLabel(_date, ContentAlignment.MiddleRight, 8.0f);
+        ConfigureLabel(_download, ContentAlignment.MiddleLeft, 7.4f);
+        ConfigureLabel(_upload, ContentAlignment.MiddleLeft, 7.4f);
+        ConfigureLabel(_time, ContentAlignment.MiddleRight, 10.2f);
+        ConfigureLabel(_date, ContentAlignment.MiddleRight, 9.1f);
 
         _download.Text = "↓ 0 KB/s";
         _upload.Text = "↑ 0 KB/s";
@@ -176,8 +176,8 @@ public sealed class TaskbarMonitorForm : Form
     private void UpdateClock()
     {
         var now = DateTime.Now;
-        _time.Text = now.ToString("t", CultureInfo.CurrentCulture);
-        _date.Text = now.ToString("d", CultureInfo.CurrentCulture);
+        _time.Text = now.ToString("HH:mm", CultureInfo.CurrentCulture);
+        _date.Text = now.ToString("dd/MM/yyyy", CultureInfo.CurrentCulture);
     }
 
     private void ClickSurface_MouseUp(object? sender, MouseEventArgs e)
@@ -235,16 +235,17 @@ public sealed class TaskbarMonitorForm : Form
             }
 
             _adapter = current;
-            var currentStats = current.GetIPv4Statistics();
-            var now = DateTime.UtcNow;
-            var elapsed = Math.Max((now - _lastSampleUtc).TotalSeconds, 0.1);
-            var rxDelta = Math.Max(0, currentStats.BytesReceived - _lastReceived);
-            var txDelta = Math.Max(0, currentStats.BytesSent - _lastSent);
+            var statsNow = current.GetIPv4Statistics();
+            var nowUtc = DateTime.UtcNow;
+            var elapsed = Math.Max((nowUtc - _lastSampleUtc).TotalSeconds, 0.1);
+            var rxDelta = Math.Max(0, statsNow.BytesReceived - _lastReceived);
+            var txDelta = Math.Max(0, statsNow.BytesSent - _lastSent);
+
             _sessionReceived += rxDelta;
             _sessionSent += txDelta;
-            _lastReceived = currentStats.BytesReceived;
-            _lastSent = currentStats.BytesSent;
-            _lastSampleUtc = now;
+            _lastReceived = statsNow.BytesReceived;
+            _lastSent = statsNow.BytesSent;
+            _lastSampleUtc = nowUtc;
 
             _download.Text = $"↓ {FormatRate(rxDelta / elapsed)}";
             _upload.Text = $"↑ {FormatRate(txDelta / elapsed)}";
@@ -298,11 +299,8 @@ public sealed class TaskbarMonitorForm : Form
               $"Enviado desde que se abrió: {FormatBytes(_sessionSent)}\n" +
               "Clic: calendario\nClic derecho: opciones";
 
-        _tooltip.SetToolTip(_layout, text);
-        _tooltip.SetToolTip(_download, text);
-        _tooltip.SetToolTip(_upload, text);
-        _tooltip.SetToolTip(_time, text);
-        _tooltip.SetToolTip(_date, text);
+        foreach (var control in new Control[] { _layout, _download, _upload, _time, _date })
+            _tooltip.SetToolTip(control, text);
     }
 
     private static string FormatRate(double bytesPerSecond)
@@ -333,31 +331,40 @@ public sealed class TaskbarMonitorForm : Form
         if (!TryGetTaskbarRect(out var taskbar))
         {
             var screen = Screen.PrimaryScreen?.Bounds ?? new Rectangle(0, 0, 1920, 1080);
-            var h = ScalePx(40);
-            var w = ScalePx(176);
-            _taskbarRect = new Rectangle(screen.Left, screen.Bottom - h, screen.Width, h);
-            SetBoundsTopMost(screen.Right - w - ScalePx(8), screen.Bottom - h, w, h);
+            const int fallbackHeight = 40;
+            const int fallbackWidth = 160;
+            _taskbarRect = new Rectangle(screen.Left, screen.Bottom - fallbackHeight, screen.Width, fallbackHeight);
+            SetBoundsTopMost(screen.Right - fallbackWidth - 6, screen.Bottom - fallbackHeight + 2, fallbackWidth, fallbackHeight - 4);
             return;
         }
 
         _taskbarRect = taskbar;
         if (taskbar.Width < taskbar.Height)
         {
-            var w = Math.Max(ScalePx(48), taskbar.Width - ScalePx(4));
-            var h = Math.Min(ScalePx(88), taskbar.Height - ScalePx(8));
-            SetBoundsTopMost(taskbar.Left + (taskbar.Width - w) / 2, taskbar.Bottom - h - ScalePx(6), w, h);
+            var verticalWidth = Math.Max(44, taskbar.Width - 4);
+            var verticalHeight = Math.Min(84, taskbar.Height - 8);
+            SetBoundsTopMost(taskbar.Left + (taskbar.Width - verticalWidth) / 2, taskbar.Bottom - verticalHeight - 4, verticalWidth, verticalHeight);
             return;
         }
 
-        var showDesktopStrip = Math.Clamp(taskbar.Height / 8, ScalePx(5), ScalePx(10));
+        // GetWindowRect already returns physical screen pixels. Do not apply DeviceDpi
+        // here, otherwise Windows scaling makes the overlay much wider than intended.
+        var showDesktopStrip = Math.Clamp(taskbar.Height / 8, 5, 9);
         var right = taskbar.Right - showDesktopStrip;
-        var clock = TryGetClockRect();
-        var width = clock.HasValue
-            ? clock.Value.Width + Math.Clamp(taskbar.Height, ScalePx(40), ScalePx(58))
-            : (int)Math.Round(taskbar.Height * 3.55);
-        width = Math.Clamp(width, ScalePx(166), ScalePx(196));
-        var height = Math.Max(ScalePx(32), taskbar.Height - ScalePx(2));
-        SetBoundsTopMost(Math.Max(taskbar.Left, right - width), taskbar.Top + (taskbar.Height - height) / 2, width, height);
+
+        // Keep the whole app inside the native clock/date area plus a small traffic
+        // column. On a normal 40-48 px Windows 11 taskbar this is about 150-170 px.
+        var nativeClock = TryGetClockRect();
+        var clockWidth = nativeClock?.Width ?? (int)Math.Round(taskbar.Height * 1.9);
+        var networkWidth = Math.Clamp((int)Math.Round(taskbar.Height * 1.75), 66, 82);
+        var width = Math.Clamp(clockWidth + networkWidth, 146, 176);
+
+        var insetY = Math.Clamp(taskbar.Height / 20, 1, 3);
+        var height = Math.Max(30, taskbar.Height - insetY * 2);
+        var x = Math.Max(taskbar.Left, right - width);
+        var y = taskbar.Top + insetY;
+
+        SetBoundsTopMost(x, y, width, height);
     }
 
     private void SetBoundsTopMost(int x, int y, int width, int height)
@@ -377,8 +384,8 @@ public sealed class TaskbarMonitorForm : Form
     {
         rect = Rectangle.Empty;
         var taskbar = NativeMethods.FindWindow("Shell_TrayWnd", null);
-        if (taskbar == IntPtr.Zero || !NativeMethods.GetWindowRect(taskbar, out var r)) return false;
-        rect = Rectangle.FromLTRB(r.Left, r.Top, r.Right, r.Bottom);
+        if (taskbar == IntPtr.Zero || !NativeMethods.GetWindowRect(taskbar, out var native)) return false;
+        rect = Rectangle.FromLTRB(native.Left, native.Top, native.Right, native.Bottom);
         return rect.Width > 0 && rect.Height > 0;
     }
 
@@ -386,6 +393,7 @@ public sealed class TaskbarMonitorForm : Form
     {
         var taskbar = NativeMethods.FindWindow("Shell_TrayWnd", null);
         if (taskbar == IntPtr.Zero) return null;
+
         IntPtr found = IntPtr.Zero;
         NativeMethods.EnumChildWindows(taskbar, (hwnd, _) =>
         {
@@ -396,11 +404,10 @@ public sealed class TaskbarMonitorForm : Form
             }
             return true;
         }, IntPtr.Zero);
-        if (found == IntPtr.Zero || !NativeMethods.GetWindowRect(found, out var r)) return null;
-        return Rectangle.FromLTRB(r.Left, r.Top, r.Right, r.Bottom);
-    }
 
-    private int ScalePx(int value) => Math.Max(1, (int)Math.Round(value * DeviceDpi / 96f));
+        if (found == IntPtr.Zero || !NativeMethods.GetWindowRect(found, out var native)) return null;
+        return Rectangle.FromLTRB(native.Left, native.Top, native.Right, native.Bottom);
+    }
 
     private void ApplyTheme()
     {
@@ -427,12 +434,14 @@ public sealed class TaskbarMonitorForm : Form
 
     private void SystemEvents_DisplaySettingsChanged(object? sender, EventArgs e)
     {
-        if (IsHandleCreated) BeginInvoke((Action)(() => { _calendar?.Close(); PositionOnTaskbar(); }));
+        if (IsHandleCreated)
+            BeginInvoke((Action)(() => { _calendar?.Close(); PositionOnTaskbar(); }));
     }
 
     private void SystemEvents_UserPreferenceChanged(object sender, UserPreferenceChangedEventArgs e)
     {
-        if (IsHandleCreated) BeginInvoke((Action)(() => { _calendar?.Close(); ApplyTheme(); PositionOnTaskbar(); }));
+        if (IsHandleCreated)
+            BeginInvoke((Action)(() => { _calendar?.Close(); ApplyTheme(); PositionOnTaskbar(); }));
     }
 
     private void StartupItem_CheckedChanged(object? sender, EventArgs e)
@@ -446,7 +455,10 @@ public sealed class TaskbarMonitorForm : Form
                 if (string.IsNullOrWhiteSpace(exe)) throw new InvalidOperationException();
                 key.SetValue(RunValueName, $"\"{exe}\"");
             }
-            else key.DeleteValue(RunValueName, throwOnMissingValue: false);
+            else
+            {
+                key.DeleteValue(RunValueName, throwOnMissingValue: false);
+            }
         }
         catch
         {
@@ -490,15 +502,19 @@ public sealed class TaskbarMonitorForm : Form
 
         [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
         internal static extern IntPtr FindWindow(string? lpClassName, string? lpWindowName);
+
         [DllImport("user32.dll", SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
         internal static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
+
         [DllImport("user32.dll", SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
         internal static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint flags);
+
         [DllImport("user32.dll")]
         [return: MarshalAs(UnmanagedType.Bool)]
         internal static extern bool EnumChildWindows(IntPtr hWndParent, EnumWindowsProc callback, IntPtr lParam);
+
         [DllImport("user32.dll", CharSet = CharSet.Unicode)]
         private static extern int GetClassName(IntPtr hWnd, System.Text.StringBuilder className, int maxCount);
 
@@ -509,6 +525,12 @@ public sealed class TaskbarMonitorForm : Form
         }
 
         [StructLayout(LayoutKind.Sequential)]
-        internal struct RECT { public int Left; public int Top; public int Right; public int Bottom; }
+        internal struct RECT
+        {
+            public int Left;
+            public int Top;
+            public int Right;
+            public int Bottom;
+        }
     }
 }
