@@ -3,6 +3,8 @@ name: Build and publish release
 on:
   push:
     branches: [main]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -61,6 +63,7 @@ jobs:
           if-no-files-found: error
 
       - name: Create or update GitHub Release
+        if: github.event_name == 'push'
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
