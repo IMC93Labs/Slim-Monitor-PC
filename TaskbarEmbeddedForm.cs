@@ -429,15 +429,15 @@ public sealed class TaskbarEmbeddedForm : Form
         var horizontal = taskbarClientSize.Width >= taskbarClientSize.Height;
         if (!horizontal)
         {
-            var width = Math.Max(42, taskbarClientSize.Width - 4);
-            var height = Math.Min(84, taskbarClientSize.Height - 8);
+            var verticalWidth = Math.Max(42, taskbarClientSize.Width - 4);
+            var verticalHeight = Math.Min(84, taskbarClientSize.Height - 8);
             NativeMethods.SetWindowPos(
                 Handle,
                 NativeMethods.HWND_TOP,
-                Math.Max(0, (taskbarClientSize.Width - width) / 2),
-                Math.Max(0, taskbarClientSize.Height - height - 4),
-                width,
-                height,
+                Math.Max(0, (taskbarClientSize.Width - verticalWidth) / 2),
+                Math.Max(0, taskbarClientSize.Height - verticalHeight - 4),
+                verticalWidth,
+                verticalHeight,
                 NativeMethods.SWP_NOACTIVATE |
                 NativeMethods.SWP_SHOWWINDOW);
             return;
