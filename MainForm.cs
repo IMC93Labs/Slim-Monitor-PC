@@ -13,8 +13,12 @@ public sealed class MainForm : Form
     private const string AppName = "Slim Monitor PC";
     private const string RunKeyPath = @"Software\Microsoft\Windows\CurrentVersion\Run";
     private const string RunValueName = "SlimMonitorPC";
+    private const string SettingsKeyPath = @"Software\IMC93Labs\SlimMonitorPC";
+    private const string PositionValueName = "TaskbarOffset";
+    private const int PreferredWidth = 96;
 
     private readonly System.Windows.Forms.Timer _timer;
+    private readonly System.Windows.Forms.Timer _zOrderTimer;
     private readonly Label _speedLabel;
     private readonly ToolTip _toolTip;
     private readonly ContextMenuStrip _menu;
@@ -29,6 +33,10 @@ public sealed class MainForm : Form
     private long _sessionSent;
     private DateTime _lastSampleUtc;
 
+    private bool _dragging;
+    private Point _dragStartCursor;
+    private Point _dragStartLocation;
+
     public MainForm()
     {
         Text = AppName;
@@ -40,8 +48,8 @@ public sealed class MainForm : Form
         MinimizeBox = false;
         ControlBox = false;
         AutoScaleMode = AutoScaleMode.Dpi;
-        Padding = new Padding(8, 0, 8, 0);
-        Cursor = Cursors.Default;
+        Padding = new Padding(3, 0, 2, 0);
+        Cursor = Cursors.SizeAll;
 
         try
         {
@@ -58,12 +66,13 @@ public sealed class MainForm : Form
         {
             AutoSize = false,
             Dock = DockStyle.Fill,
-            TextAlign = ContentAlignment.MiddleCenter,
-            Text = "↓ —   ↑ —",
-            Font = new Font("Segoe UI", 9.0f, FontStyle.Regular, GraphicsUnit.Point),
+            TextAlign = ContentAlignment.MiddleLeft,
+            Text = "↓ —\n↑ —",
+            Font = new Font("Segoe UI", 8.0f, FontStyle.Regular, GraphicsUnit.Point),
             BackColor = Color.Transparent,
             ForeColor = ForeColor,
-            UseMnemonic = false
+            UseMnemonic = false,
+            Cursor = Cursors.SizeAll
         };
         Controls.Add(_speedLabel);
 
@@ -83,8 +92,12 @@ public sealed class MainForm : Form
         };
         _startupItem.CheckedChanged += StartupItem_CheckedChanged;
 
-        var refreshItem = new ToolStripMenuItem("Recolocar en la barra de tareas");
-        refreshItem.Click += (_, _) => PositionOnTaskbar();
+        var resetPositionItem = new ToolStripMenuItem("Restablecer posición");
+        resetPositionItem.Click += (_, _) =>
+        {
+            ClearSavedTaskbarOffset();
+            PositionOnTaskbar(useSavedPosition: false);
+        };
 
         var exitItem = new ToolStripMenuItem("Salir");
         exitItem.Click += (_, _) => Close();
@@ -92,25 +105,39 @@ public sealed class MainForm : Form
         _menu.Items.Add(_adapterItem);
         _menu.Items.Add(new ToolStripSeparator());
         _menu.Items.Add(_startupItem);
-        _menu.Items.Add(refreshItem);
+        _menu.Items.Add(resetPositionItem);
         _menu.Items.Add(new ToolStripSeparator());
         _menu.Items.Add(exitItem);
 
         ContextMenuStrip = _menu;
         _speedLabel.ContextMenuStrip = _menu;
 
+        MouseDown += Drag_MouseDown;
+        MouseMove += Drag_MouseMove;
+        MouseUp += Drag_MouseUp;
+        _speedLabel.MouseDown += Drag_MouseDown;
+        _speedLabel.MouseMove += Drag_MouseMove;
+        _speedLabel.MouseUp += Drag_MouseUp;
+
         _timer = new System.Windows.Forms.Timer { Interval = 1000 };
         _timer.Tick += (_, _) => UpdateNetworkSpeed();
+
+        // Explorer/taskbar can move itself above other top-most windows after a click.
+        // Reasserting only the Z-order keeps the meter visible without moving it.
+        _zOrderTimer = new System.Windows.Forms.Timer { Interval = 250 };
+        _zOrderTimer.Tick += (_, _) => EnsureAboveTaskbar();
 
         SystemEvents.DisplaySettingsChanged += SystemEvents_DisplaySettingsChanged;
         SystemEvents.UserPreferenceChanged += SystemEvents_UserPreferenceChanged;
 
         Shown += (_, _) =>
         {
-            PositionOnTaskbar();
+            PositionOnTaskbar(useSavedPosition: true);
             ResetAdapter();
             UpdateNetworkSpeed();
+            EnsureAboveTaskbar();
             _timer.Start();
+            _zOrderTimer.Start();
         };
     }
 
@@ -131,6 +158,7 @@ public sealed class MainForm : Form
     protected override void OnFormClosed(FormClosedEventArgs e)
     {
         _timer.Stop();
+        _zOrderTimer.Stop();
         SystemEvents.DisplaySettingsChanged -= SystemEvents_DisplaySettingsChanged;
         SystemEvents.UserPreferenceChanged -= SystemEvents_UserPreferenceChanged;
         _menu.Dispose();
@@ -141,7 +169,7 @@ public sealed class MainForm : Form
     private void SystemEvents_DisplaySettingsChanged(object? sender, EventArgs e)
     {
         if (IsHandleCreated)
-            BeginInvoke((Action)PositionOnTaskbar);
+            BeginInvoke((Action)(() => PositionOnTaskbar(useSavedPosition: true)));
     }
 
     private void SystemEvents_UserPreferenceChanged(object sender, UserPreferenceChangedEventArgs e)
@@ -153,8 +181,51 @@ public sealed class MainForm : Form
         {
             ApplyTheme();
             _speedLabel.ForeColor = ForeColor;
-            PositionOnTaskbar();
+            PositionOnTaskbar(useSavedPosition: true);
         }));
+    }
+
+    private void Drag_MouseDown(object? sender, MouseEventArgs e)
+    {
+        if (e.Button != MouseButtons.Left)
+            return;
+
+        _dragging = true;
+        _dragStartCursor = Cursor.Position;
+        _dragStartLocation = Location;
+        Capture = true;
+        _speedLabel.Capture = true;
+        EnsureAboveTaskbar();
+    }
+
+    private void Drag_MouseMove(object? sender, MouseEventArgs e)
+    {
+        if (!_dragging || e.Button != MouseButtons.Left)
+            return;
+
+        var cursor = Cursor.Position;
+        var proposed = new Point(
+            _dragStartLocation.X + cursor.X - _dragStartCursor.X,
+            _dragStartLocation.Y + cursor.Y - _dragStartCursor.Y);
+
+        MoveWithinTaskbar(proposed);
+        EnsureAboveTaskbar();
+    }
+
+    private void Drag_MouseUp(object? sender, MouseEventArgs e)
+    {
+        if (e.Button != MouseButtons.Left)
+            return;
+
+        if (_dragging)
+        {
+            _dragging = false;
+            Capture = false;
+            _speedLabel.Capture = false;
+            SaveTaskbarOffset();
+        }
+
+        EnsureAboveTaskbar();
     }
 
     private void UpdateNetworkSpeed()
@@ -166,9 +237,9 @@ public sealed class MainForm : Form
             {
                 _adapter = null;
                 _adapterId = null;
-                _speedLabel.Text = "Wi-Fi sin conexión";
+                _speedLabel.Text = "↓ —\n↑ —";
                 _adapterItem.Text = "Wi-Fi: sin conexión";
-                _toolTip.SetToolTip(_speedLabel, "No se ha encontrado una interfaz Wi-Fi activa.");
+                _toolTip.SetToolTip(_speedLabel, "Wi-Fi sin conexión\nArrastra con el botón izquierdo para mover\nClic derecho: opciones");
                 return;
             }
 
@@ -183,7 +254,7 @@ public sealed class MainForm : Form
                 _sessionSent = 0;
                 _lastSampleUtc = DateTime.UtcNow;
                 _adapterItem.Text = $"Wi-Fi: {FriendlyAdapterName(current)}";
-                _speedLabel.Text = "↓ 0 KB/s   ↑ 0 KB/s";
+                _speedLabel.Text = "↓ 0 KB/s\n↑ 0 KB/s";
                 UpdateTooltip();
                 return;
             }
@@ -206,13 +277,13 @@ public sealed class MainForm : Form
             _lastSent = stats.BytesSent;
             _lastSampleUtc = now;
 
-            _speedLabel.Text = $"↓ {FormatRate(rxPerSecond)}   ↑ {FormatRate(txPerSecond)}";
+            _speedLabel.Text = $"↓ {FormatRate(rxPerSecond)}\n↑ {FormatRate(txPerSecond)}";
             _adapterItem.Text = $"Wi-Fi: {FriendlyAdapterName(current)}";
             UpdateTooltip();
         }
         catch
         {
-            _speedLabel.Text = "Wi-Fi —";
+            _speedLabel.Text = "↓ —\n↑ —";
         }
     }
 
@@ -259,6 +330,7 @@ public sealed class MainForm : Form
         var text = $"{FriendlyAdapterName(_adapter)}\n" +
                    $"Recibido desde que se abrió: {FormatBytes(_sessionReceived)}\n" +
                    $"Enviado desde que se abrió: {FormatBytes(_sessionSent)}\n" +
+                   "Arrastra con el botón izquierdo para mover\n" +
                    "Clic derecho: opciones";
         _toolTip.SetToolTip(_speedLabel, text);
     }
@@ -291,25 +363,26 @@ public sealed class MainForm : Form
         return $"{gb:0.00} GB";
     }
 
-    private void PositionOnTaskbar()
+    private void PositionOnTaskbar(bool useSavedPosition)
     {
         if (!IsHandleCreated)
             return;
 
-        const int preferredWidth = 180;
-        var taskbar = NativeMethods.FindWindow("Shell_TrayWnd", null);
-
-        if (taskbar == IntPtr.Zero || !NativeMethods.GetWindowRect(taskbar, out var taskbarRect))
+        if (!TryGetTaskbarRect(out var taskbarRect))
         {
             var area = Screen.PrimaryScreen?.WorkingArea ?? new Rectangle(0, 0, 1920, 1080);
-            Bounds = new Rectangle(area.Right - preferredWidth - 12, area.Bottom - 34, preferredWidth, 30);
+            NativeMethods.SetWindowPos(
+                Handle,
+                NativeMethods.HWND_TOPMOST,
+                area.Right - PreferredWidth - 12,
+                area.Bottom - 32,
+                PreferredWidth,
+                30,
+                NativeMethods.SWP_NOACTIVATE | NativeMethods.SWP_SHOWWINDOW);
             return;
         }
 
-        var taskbarWidth = taskbarRect.Right - taskbarRect.Left;
-        var taskbarHeight = taskbarRect.Bottom - taskbarRect.Top;
-        var horizontal = taskbarWidth >= taskbarHeight;
-
+        var horizontal = taskbarRect.Width >= taskbarRect.Height;
         int width;
         int height;
         int x;
@@ -317,23 +390,34 @@ public sealed class MainForm : Form
 
         if (horizontal)
         {
-            height = Math.Clamp(taskbarHeight - 8, 24, 32);
-            width = preferredWidth;
+            width = PreferredWidth;
+            height = Math.Clamp(taskbarRect.Height - 8, 28, 34);
+            y = taskbarRect.Top + (taskbarRect.Height - height) / 2;
 
-            var tray = NativeMethods.FindWindowEx(taskbar, IntPtr.Zero, "TrayNotifyWnd", null);
-            if (tray != IntPtr.Zero && NativeMethods.GetWindowRect(tray, out var trayRect))
-                x = Math.Max(taskbarRect.Left + 8, trayRect.Left - width - 8);
+            var savedOffset = useSavedPosition ? LoadSavedTaskbarOffset() : null;
+            if (savedOffset.HasValue)
+            {
+                x = Math.Clamp(taskbarRect.Left + savedOffset.Value, taskbarRect.Left, taskbarRect.Right - width);
+            }
             else
-                x = Math.Max(taskbarRect.Left + 8, taskbarRect.Right - width - 250);
-
-            y = taskbarRect.Top + (taskbarHeight - height) / 2;
+            {
+                var tray = NativeMethods.FindWindowEx(NativeMethods.FindWindow("Shell_TrayWnd", null), IntPtr.Zero, "TrayNotifyWnd", null);
+                if (tray != IntPtr.Zero && NativeMethods.GetWindowRect(tray, out var trayRect))
+                    x = Math.Max(taskbarRect.Left + 4, trayRect.Left - width - 4);
+                else
+                    x = Math.Max(taskbarRect.Left + 4, taskbarRect.Right - width - 250);
+            }
         }
         else
         {
-            width = Math.Clamp(taskbarWidth - 8, 40, preferredWidth);
-            height = 30;
-            x = taskbarRect.Left + (taskbarWidth - width) / 2;
-            y = Math.Max(taskbarRect.Top + 8, taskbarRect.Bottom - height - 110);
+            width = Math.Clamp(taskbarRect.Width - 6, 46, PreferredWidth);
+            height = 32;
+            x = taskbarRect.Left + (taskbarRect.Width - width) / 2;
+
+            var savedOffset = useSavedPosition ? LoadSavedTaskbarOffset() : null;
+            y = savedOffset.HasValue
+                ? Math.Clamp(taskbarRect.Top + savedOffset.Value, taskbarRect.Top, taskbarRect.Bottom - height)
+                : Math.Max(taskbarRect.Top + 4, taskbarRect.Bottom - height - 110);
         }
 
         NativeMethods.SetWindowPos(
@@ -344,6 +428,112 @@ public sealed class MainForm : Form
             width,
             height,
             NativeMethods.SWP_NOACTIVATE | NativeMethods.SWP_SHOWWINDOW);
+    }
+
+    private void MoveWithinTaskbar(Point proposedLocation)
+    {
+        if (!TryGetTaskbarRect(out var taskbarRect))
+        {
+            Location = proposedLocation;
+            return;
+        }
+
+        var horizontal = taskbarRect.Width >= taskbarRect.Height;
+        int x;
+        int y;
+
+        if (horizontal)
+        {
+            x = Math.Clamp(proposedLocation.X, taskbarRect.Left, taskbarRect.Right - Width);
+            y = taskbarRect.Top + (taskbarRect.Height - Height) / 2;
+        }
+        else
+        {
+            x = taskbarRect.Left + (taskbarRect.Width - Width) / 2;
+            y = Math.Clamp(proposedLocation.Y, taskbarRect.Top, taskbarRect.Bottom - Height);
+        }
+
+        NativeMethods.SetWindowPos(
+            Handle,
+            NativeMethods.HWND_TOPMOST,
+            x,
+            y,
+            Width,
+            Height,
+            NativeMethods.SWP_NOACTIVATE | NativeMethods.SWP_SHOWWINDOW);
+    }
+
+    private void EnsureAboveTaskbar()
+    {
+        if (!IsHandleCreated || IsDisposed)
+            return;
+
+        NativeMethods.SetWindowPos(
+            Handle,
+            NativeMethods.HWND_TOPMOST,
+            0,
+            0,
+            0,
+            0,
+            NativeMethods.SWP_NOMOVE |
+            NativeMethods.SWP_NOSIZE |
+            NativeMethods.SWP_NOACTIVATE |
+            NativeMethods.SWP_SHOWWINDOW);
+    }
+
+    private static bool TryGetTaskbarRect(out Rectangle rect)
+    {
+        rect = Rectangle.Empty;
+        var taskbar = NativeMethods.FindWindow("Shell_TrayWnd", null);
+        if (taskbar == IntPtr.Zero || !NativeMethods.GetWindowRect(taskbar, out var nativeRect))
+            return false;
+
+        rect = Rectangle.FromLTRB(nativeRect.Left, nativeRect.Top, nativeRect.Right, nativeRect.Bottom);
+        return rect.Width > 0 && rect.Height > 0;
+    }
+
+    private void SaveTaskbarOffset()
+    {
+        try
+        {
+            if (!TryGetTaskbarRect(out var taskbarRect))
+                return;
+
+            var horizontal = taskbarRect.Width >= taskbarRect.Height;
+            var offset = horizontal ? Left - taskbarRect.Left : Top - taskbarRect.Top;
+            using var key = Registry.CurrentUser.CreateSubKey(SettingsKeyPath, writable: true);
+            key.SetValue(PositionValueName, offset, RegistryValueKind.DWord);
+        }
+        catch
+        {
+            // Position persistence is optional; dragging still works if the registry is unavailable.
+        }
+    }
+
+    private static int? LoadSavedTaskbarOffset()
+    {
+        try
+        {
+            using var key = Registry.CurrentUser.OpenSubKey(SettingsKeyPath);
+            return key?.GetValue(PositionValueName) is int offset ? offset : null;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static void ClearSavedTaskbarOffset()
+    {
+        try
+        {
+            using var key = Registry.CurrentUser.CreateSubKey(SettingsKeyPath, writable: true);
+            key.DeleteValue(PositionValueName, throwOnMissingValue: false);
+        }
+        catch
+        {
+            // Optional setting; no action required.
+        }
     }
 
     private void ApplyTheme()
@@ -414,6 +604,8 @@ public sealed class MainForm : Form
     private static class NativeMethods
     {
         internal static readonly IntPtr HWND_TOPMOST = new(-1);
+        internal const uint SWP_NOSIZE = 0x0001;
+        internal const uint SWP_NOMOVE = 0x0002;
         internal const uint SWP_NOACTIVATE = 0x0010;
         internal const uint SWP_SHOWWINDOW = 0x0040;
 
