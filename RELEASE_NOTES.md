@@ -1,20 +1,24 @@
-# Slim Monitor PC v0.2.2
+# Slim Monitor PC v0.2.3
 
-Visual fit update for the unified Windows taskbar block.
+Taskbar-visibility and fullscreen-behavior update.
 
 ## Fixed
 
-- Corrected excessive width on systems using Windows display scaling. Taskbar coordinates are now treated as the physical pixels Windows already reports, avoiding double DPI scaling.
-- The Slim Monitor PC block is now constrained to the clock/date zone and no longer reaches left far enough to cover Wi-Fi, Bluetooth or other tray icons.
+- Slim Monitor PC now disappears automatically when the Windows taskbar is hidden.
+- Fullscreen games and applications are detected, so the taskbar overlay no longer stays on top of gameplay.
+- The block comes back automatically when the taskbar/desktop becomes available again.
+- Removed the repeated `SWP_SHOWWINDOW` forcing that caused a visible blink when using Windows **Show desktop**.
+- Z-order is now refreshed without forcing the window visible, and only while the taskbar should be shown.
+- The built-in calendar closes automatically when a fullscreen application takes over or the taskbar hides.
+
+## Preserved from v0.2.2
+
+- Larger time and date.
+- Correct physical-pixel/DPI positioning.
+- The block stays clear of Wi-Fi, volume, battery and other tray icons.
 - The far-right **Show desktop** strip remains free.
-- The block is inset vertically so it stays fully inside the taskbar instead of appearing to protrude above it.
-
-## Visual changes
-
-- Time is larger and easier to read.
-- Date is also larger and uses a fixed `dd/MM/yyyy` layout.
-- Network speed remains on the left in a slightly smaller column so the clock/date remain visually dominant.
+- **Start with Windows**, Wi-Fi traffic measurement and the built-in calendar remain available.
 
 ## Validation
 
-The v0.2.1 release safeguards remain enabled: the Windows CI build must pass the executable startup self-test and confirm that the final single-file EXE exposes its embedded application icon before release.
+The Windows CI pipeline still requires the single-file executable to pass its startup self-test and embedded-icon verification before publication.

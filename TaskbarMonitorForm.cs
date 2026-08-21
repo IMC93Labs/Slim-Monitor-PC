@@ -25,7 +25,7 @@ public sealed class TaskbarMonitorForm : Form
     private readonly ToolStripMenuItem _startupItem;
     private readonly ToolTip _tooltip = new();
     private readonly System.Windows.Forms.Timer _networkTimer = new() { Interval = 1000 };
-    private readonly System.Windows.Forms.Timer _zOrderTimer = new() { Interval = 500 };
+    private readonly System.Windows.Forms.Timer _shellTimer = new() { Interval = 250 };
 
     private NetworkInterface? _adapter;
     private string? _adapterId;
@@ -36,6 +36,8 @@ public sealed class TaskbarMonitorForm : Form
     private DateTime _lastSampleUtc = DateTime.UtcNow;
     private CalendarPopup? _calendar;
     private Rectangle _taskbarRect;
+    private bool _shellVisible;
+    private DateTime _lastZOrderRefreshUtc = DateTime.MinValue;
 
     public TaskbarMonitorForm()
     {
@@ -52,6 +54,10 @@ public sealed class TaskbarMonitorForm : Form
         DoubleBuffered = true;
         Cursor = Cursors.Hand;
 
+        // Prevent a one-frame flash over a fullscreen app while the initial
+        // taskbar/fullscreen state is being detected.
+        Opacity = 0;
+
         try { Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath); } catch { }
 
         ConfigureLayout();
@@ -67,7 +73,7 @@ public sealed class TaskbarMonitorForm : Form
         var calendarItem = new ToolStripMenuItem("Abrir calendario");
         calendarItem.Click += (_, _) => ToggleCalendar();
         var realignItem = new ToolStripMenuItem("Reajustar a la barra de tareas");
-        realignItem.Click += (_, _) => PositionOnTaskbar();
+        realignItem.Click += (_, _) => MaintainShellState(forcePosition: true);
         var exitItem = new ToolStripMenuItem("Salir");
         exitItem.Click += (_, _) => Close();
 
@@ -103,20 +109,19 @@ public sealed class TaskbarMonitorForm : Form
             UpdateClock();
             UpdateNetworkSpeed();
         };
-        _zOrderTimer.Tick += (_, _) => EnsureAboveTaskbar();
+        _shellTimer.Tick += (_, _) => MaintainShellState();
 
         SystemEvents.DisplaySettingsChanged += SystemEvents_DisplaySettingsChanged;
         SystemEvents.UserPreferenceChanged += SystemEvents_UserPreferenceChanged;
 
         Shown += (_, _) =>
         {
-            PositionOnTaskbar();
             ResetAdapter();
             UpdateNetworkSpeed();
             UpdateClock();
-            EnsureAboveTaskbar();
+            MaintainShellState(forcePosition: true);
             _networkTimer.Start();
-            _zOrderTimer.Start();
+            _shellTimer.Start();
         };
     }
 
@@ -188,6 +193,9 @@ public sealed class TaskbarMonitorForm : Form
 
     private void ToggleCalendar()
     {
+        if (!_shellVisible)
+            return;
+
         if (_calendar is { IsDisposed: false, Visible: true })
         {
             _calendar.Close();
@@ -323,37 +331,71 @@ public sealed class TaskbarMonitorForm : Form
         return $"{mb / 1024d:0.00} GB";
     }
 
-    private void PositionOnTaskbar()
+    private void MaintainShellState(bool forcePosition = false)
     {
-        if (!IsHandleCreated)
+        if (!IsHandleCreated || IsDisposed)
             return;
 
-        if (!TryGetTaskbarRect(out var taskbar))
+        var taskbarVisible = TryGetVisibleTaskbar(out var taskbarRect);
+        var fullscreenForeground = taskbarVisible && IsForegroundFullscreen();
+        var shouldShow = taskbarVisible && !fullscreenForeground;
+
+        if (!shouldShow)
         {
-            var screen = Screen.PrimaryScreen?.Bounds ?? new Rectangle(0, 0, 1920, 1080);
-            const int fallbackHeight = 40;
-            const int fallbackWidth = 160;
-            _taskbarRect = new Rectangle(screen.Left, screen.Bottom - fallbackHeight, screen.Width, fallbackHeight);
-            SetBoundsTopMost(screen.Right - fallbackWidth - 6, screen.Bottom - fallbackHeight + 2, fallbackWidth, fallbackHeight - 4);
+            _shellVisible = false;
+            if (_calendar is { IsDisposed: false })
+            {
+                _calendar.Close();
+                _calendar = null;
+            }
+            if (Visible)
+                Hide();
             return;
         }
 
+        var stateChanged = !_shellVisible;
+        _shellVisible = true;
+        _taskbarRect = taskbarRect;
+
+        if (forcePosition || stateChanged)
+            PositionOnTaskbar(taskbarRect);
+
+        if (!Visible)
+            Show();
+
+        if (Opacity < 1)
+            Opacity = 1;
+
+        // Do not use SWP_SHOWWINDOW repeatedly. That was the source of the
+        // visible blink when Windows' Show desktop button changed shell Z-order.
+        // Refresh only the Z-order, and at a low frequency while the taskbar is visible.
+        if (stateChanged || forcePosition || DateTime.UtcNow - _lastZOrderRefreshUtc >= TimeSpan.FromSeconds(2))
+        {
+            EnsureAboveTaskbar();
+            _lastZOrderRefreshUtc = DateTime.UtcNow;
+        }
+    }
+
+    private void PositionOnTaskbar(Rectangle taskbar)
+    {
         _taskbarRect = taskbar;
+
         if (taskbar.Width < taskbar.Height)
         {
             var verticalWidth = Math.Max(44, taskbar.Width - 4);
             var verticalHeight = Math.Min(84, taskbar.Height - 8);
-            SetBoundsTopMost(taskbar.Left + (taskbar.Width - verticalWidth) / 2, taskbar.Bottom - verticalHeight - 4, verticalWidth, verticalHeight);
+            SetBoundsTopMost(
+                taskbar.Left + (taskbar.Width - verticalWidth) / 2,
+                taskbar.Bottom - verticalHeight - 4,
+                verticalWidth,
+                verticalHeight);
             return;
         }
 
-        // GetWindowRect already returns physical screen pixels. Do not apply DeviceDpi
-        // here, otherwise Windows scaling makes the overlay much wider than intended.
+        // GetWindowRect returns physical screen pixels. Do not apply DeviceDpi here.
         var showDesktopStrip = Math.Clamp(taskbar.Height / 8, 5, 9);
         var right = taskbar.Right - showDesktopStrip;
 
-        // Keep the whole app inside the native clock/date area plus a small traffic
-        // column. On a normal 40-48 px Windows 11 taskbar this is about 150-170 px.
         var nativeClock = TryGetClockRect();
         var clockWidth = nativeClock?.Width ?? (int)Math.Round(taskbar.Height * 1.9);
         var networkWidth = Math.Clamp((int)Math.Round(taskbar.Height * 1.75), 66, 82);
@@ -369,30 +411,130 @@ public sealed class TaskbarMonitorForm : Form
 
     private void SetBoundsTopMost(int x, int y, int width, int height)
     {
-        NativeMethods.SetWindowPos(Handle, NativeMethods.HWND_TOPMOST, x, y, width, height,
-            NativeMethods.SWP_NOACTIVATE | NativeMethods.SWP_SHOWWINDOW);
+        NativeMethods.SetWindowPos(
+            Handle,
+            NativeMethods.HWND_TOPMOST,
+            x,
+            y,
+            width,
+            height,
+            NativeMethods.SWP_NOACTIVATE);
     }
 
     private void EnsureAboveTaskbar()
     {
-        if (!IsHandleCreated || IsDisposed) return;
-        NativeMethods.SetWindowPos(Handle, NativeMethods.HWND_TOPMOST, 0, 0, 0, 0,
-            NativeMethods.SWP_NOMOVE | NativeMethods.SWP_NOSIZE | NativeMethods.SWP_NOACTIVATE | NativeMethods.SWP_SHOWWINDOW);
+        if (!IsHandleCreated || IsDisposed || !_shellVisible)
+            return;
+
+        NativeMethods.SetWindowPos(
+            Handle,
+            NativeMethods.HWND_TOPMOST,
+            0,
+            0,
+            0,
+            0,
+            NativeMethods.SWP_NOMOVE |
+            NativeMethods.SWP_NOSIZE |
+            NativeMethods.SWP_NOACTIVATE);
     }
 
-    private static bool TryGetTaskbarRect(out Rectangle rect)
+    private bool TryGetVisibleTaskbar(out Rectangle rect)
     {
         rect = Rectangle.Empty;
         var taskbar = NativeMethods.FindWindow("Shell_TrayWnd", null);
-        if (taskbar == IntPtr.Zero || !NativeMethods.GetWindowRect(taskbar, out var native)) return false;
+        if (taskbar == IntPtr.Zero || !NativeMethods.IsWindowVisible(taskbar))
+            return false;
+
+        if (!NativeMethods.GetWindowRect(taskbar, out var native))
+            return false;
+
         rect = Rectangle.FromLTRB(native.Left, native.Top, native.Right, native.Bottom);
-        return rect.Width > 0 && rect.Height > 0;
+        if (rect.Width <= 0 || rect.Height <= 0)
+            return false;
+
+        // An auto-hidden taskbar often remains a valid Shell_TrayWnd but is moved
+        // almost completely outside the monitor, leaving only a 1-2 px activation edge.
+        // Treat that state as hidden as well.
+        var bestIntersection = Rectangle.Empty;
+        long bestArea = 0;
+        foreach (var screen in Screen.AllScreens)
+        {
+            var intersection = Rectangle.Intersect(rect, screen.Bounds);
+            var area = (long)Math.Max(0, intersection.Width) * Math.Max(0, intersection.Height);
+            if (area > bestArea)
+            {
+                bestArea = area;
+                bestIntersection = intersection;
+            }
+        }
+
+        var totalArea = (long)rect.Width * rect.Height;
+        if (totalArea <= 0 || bestArea * 100 < totalArea * 40)
+            return false;
+
+        if (rect.Width >= rect.Height && bestIntersection.Height < Math.Min(8, Math.Max(1, rect.Height / 3)))
+            return false;
+        if (rect.Height > rect.Width && bestIntersection.Width < Math.Min(8, Math.Max(1, rect.Width / 3)))
+            return false;
+
+        return true;
+    }
+
+    private bool IsForegroundFullscreen()
+    {
+        var foreground = NativeMethods.GetForegroundWindow();
+        if (foreground == IntPtr.Zero || foreground == Handle)
+            return false;
+
+        var className = NativeMethods.GetClassName(foreground);
+        if (className.Equals("Shell_TrayWnd", StringComparison.OrdinalIgnoreCase) ||
+            className.Equals("Shell_SecondaryTrayWnd", StringComparison.OrdinalIgnoreCase) ||
+            className.Equals("Progman", StringComparison.OrdinalIgnoreCase) ||
+            className.Equals("WorkerW", StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        if (!NativeMethods.IsWindowVisible(foreground) || NativeMethods.IsIconic(foreground))
+            return false;
+
+        if (!TryGetVisibleWindowBounds(foreground, out var bounds))
+            return false;
+
+        var screen = Screen.FromHandle(foreground).Bounds;
+        const int tolerance = 2;
+        return bounds.Left <= screen.Left + tolerance &&
+               bounds.Top <= screen.Top + tolerance &&
+               bounds.Right >= screen.Right - tolerance &&
+               bounds.Bottom >= screen.Bottom - tolerance;
+    }
+
+    private static bool TryGetVisibleWindowBounds(IntPtr window, out Rectangle bounds)
+    {
+        bounds = Rectangle.Empty;
+        var extended = new NativeMethods.RECT();
+        var hr = NativeMethods.DwmGetWindowAttribute(
+            window,
+            NativeMethods.DWMWA_EXTENDED_FRAME_BOUNDS,
+            out extended,
+            Marshal.SizeOf<NativeMethods.RECT>());
+
+        if (hr == 0 && extended.Right > extended.Left && extended.Bottom > extended.Top)
+        {
+            bounds = Rectangle.FromLTRB(extended.Left, extended.Top, extended.Right, extended.Bottom);
+            return true;
+        }
+
+        if (!NativeMethods.GetWindowRect(window, out var native))
+            return false;
+
+        bounds = Rectangle.FromLTRB(native.Left, native.Top, native.Right, native.Bottom);
+        return bounds.Width > 0 && bounds.Height > 0;
     }
 
     private static Rectangle? TryGetClockRect()
     {
         var taskbar = NativeMethods.FindWindow("Shell_TrayWnd", null);
-        if (taskbar == IntPtr.Zero) return null;
+        if (taskbar == IntPtr.Zero)
+            return null;
 
         IntPtr found = IntPtr.Zero;
         NativeMethods.EnumChildWindows(taskbar, (hwnd, _) =>
@@ -405,7 +547,9 @@ public sealed class TaskbarMonitorForm : Form
             return true;
         }, IntPtr.Zero);
 
-        if (found == IntPtr.Zero || !NativeMethods.GetWindowRect(found, out var native)) return null;
+        if (found == IntPtr.Zero || !NativeMethods.GetWindowRect(found, out var native))
+            return null;
+
         return Rectangle.FromLTRB(native.Left, native.Top, native.Right, native.Bottom);
     }
 
@@ -435,13 +579,13 @@ public sealed class TaskbarMonitorForm : Form
     private void SystemEvents_DisplaySettingsChanged(object? sender, EventArgs e)
     {
         if (IsHandleCreated)
-            BeginInvoke((Action)(() => { _calendar?.Close(); PositionOnTaskbar(); }));
+            BeginInvoke((Action)(() => { _calendar?.Close(); MaintainShellState(forcePosition: true); }));
     }
 
     private void SystemEvents_UserPreferenceChanged(object sender, UserPreferenceChangedEventArgs e)
     {
         if (IsHandleCreated)
-            BeginInvoke((Action)(() => { _calendar?.Close(); ApplyTheme(); PositionOnTaskbar(); }));
+            BeginInvoke((Action)(() => { _calendar?.Close(); ApplyTheme(); MaintainShellState(forcePosition: true); }));
     }
 
     private void StartupItem_CheckedChanged(object? sender, EventArgs e)
@@ -452,7 +596,8 @@ public sealed class TaskbarMonitorForm : Form
             if (_startupItem.Checked)
             {
                 var exe = Environment.ProcessPath ?? Process.GetCurrentProcess().MainModule?.FileName;
-                if (string.IsNullOrWhiteSpace(exe)) throw new InvalidOperationException();
+                if (string.IsNullOrWhiteSpace(exe))
+                    throw new InvalidOperationException();
                 key.SetValue(RunValueName, $"\"{exe}\"");
             }
             else
@@ -482,7 +627,7 @@ public sealed class TaskbarMonitorForm : Form
     protected override void OnFormClosed(FormClosedEventArgs e)
     {
         _networkTimer.Stop();
-        _zOrderTimer.Stop();
+        _shellTimer.Stop();
         _calendar?.Close();
         SystemEvents.DisplaySettingsChanged -= SystemEvents_DisplaySettingsChanged;
         SystemEvents.UserPreferenceChanged -= SystemEvents_UserPreferenceChanged;
@@ -493,15 +638,26 @@ public sealed class TaskbarMonitorForm : Form
 
     private static class NativeMethods
     {
+        internal const int DWMWA_EXTENDED_FRAME_BOUNDS = 9;
         internal static readonly IntPtr HWND_TOPMOST = new(-1);
         internal const uint SWP_NOSIZE = 0x0001;
         internal const uint SWP_NOMOVE = 0x0002;
         internal const uint SWP_NOACTIVATE = 0x0010;
-        internal const uint SWP_SHOWWINDOW = 0x0040;
         internal delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
 
         [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
         internal static extern IntPtr FindWindow(string? lpClassName, string? lpWindowName);
+
+        [DllImport("user32.dll")]
+        internal static extern IntPtr GetForegroundWindow();
+
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        internal static extern bool IsWindowVisible(IntPtr hWnd);
+
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        internal static extern bool IsIconic(IntPtr hWnd);
 
         [DllImport("user32.dll", SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
@@ -517,6 +673,9 @@ public sealed class TaskbarMonitorForm : Form
 
         [DllImport("user32.dll", CharSet = CharSet.Unicode)]
         private static extern int GetClassName(IntPtr hWnd, System.Text.StringBuilder className, int maxCount);
+
+        [DllImport("dwmapi.dll")]
+        internal static extern int DwmGetWindowAttribute(IntPtr hwnd, int attribute, out RECT attributeValue, int attributeSize);
 
         internal static string GetClassName(IntPtr hWnd)
         {
