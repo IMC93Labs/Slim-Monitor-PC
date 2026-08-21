@@ -1,30 +1,23 @@
-# Slim Monitor PC v0.2.4
+# Slim Monitor PC v0.2.5
 
-Native taskbar-integration update focused on eliminating flicker and making the monitor behave as part of Windows instead of as a floating overlay.
+Windows 11 compatibility hotfix after the v0.2.4 native-child approach proved invisible on the real target system.
 
-## Main change
+## Main fix
 
-- Slim Monitor PC is now attached as a child of the Windows `Shell_TrayWnd` taskbar.
-- It is no longer a separate `TopMost` window fighting the Z-order when you change windows or press **Show desktop**.
-- Because it belongs to the taskbar, it naturally follows taskbar visibility and cannot remain floating above a fullscreen game when the taskbar is behind/hidden.
+- Removes the direct `Shell_TrayWnd` child-window embedding used by v0.2.4.
+- Restores a normal top-level tool window, but without the old foreground/fullscreen heuristic that caused constant hide/show flicker.
+- Taskbar visibility is now determined by probing the real **Show desktop** strip with `WindowFromPoint` and confirming that the topmost window at that point belongs to `Shell_TrayWnd`.
+- Normal maximized applications therefore keep Slim Monitor PC visible and stable.
+- Fullscreen games/apps that actually cover the taskbar make Slim Monitor PC hide automatically.
+- Auto-hidden/off-screen taskbar states also keep the monitor hidden.
 
-## Layout
+## Layout and information
 
-- The unified traffic + time/date block is narrower than v0.2.3.
-- Extra left spacing creates a clearer gap from the battery, volume and Wi-Fi icons.
-- Time/date remain visually dominant and the full `dd/MM/yyyy` date is retained.
-- The far-right **Show desktop** strip remains free.
-
-## Information menu
-
-- The hover tooltip has been removed completely.
-- Right-click now shows:
-  - active Wi-Fi adapter,
-  - current download speed,
-  - current upload speed,
-  - received data since launch,
-  - sent data since launch,
-  - calendar, Start with Windows, realign and exit actions.
+- Keeps the larger time and date introduced previously.
+- Narrows the total block further to create a clearer gap from battery, volume and Wi-Fi icons.
+- Keeps the far-right **Show desktop** strip free.
+- No hover tooltip is used.
+- Right-click shows active Wi-Fi adapter, current download/upload speed, session received/sent totals, calendar, Start with Windows, realign and exit actions.
 
 ## Preserved
 

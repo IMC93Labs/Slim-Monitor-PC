@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.2.5 — 2026-08-21
+
+- Revert the v0.2.4 direct `Shell_TrayWnd` child embedding because it can be hidden by the Windows 11 XAML/composition taskbar.
+- Introduce a stable top-level tool window that no longer repositions or changes Z-order on every foreground-window change.
+- Replace the previous fullscreen heuristic with a real taskbar visibility probe using the free **Show desktop** strip and `WindowFromPoint`.
+- Keep the monitor visible for normal maximized windows, avoiding the hide/show flicker seen in v0.2.3.
+- Hide automatically when a fullscreen game/app actually covers the taskbar or when the taskbar is auto-hidden/off-screen.
+- Narrow the block further to increase spacing from battery, volume and Wi-Fi icons.
+- Keep hover information disabled; detailed network/session data remains in the right-click menu.
+
 ## 0.2.4 — 2026-08-21
 
 - Rework taskbar integration so the monitor is a native child of `Shell_TrayWnd` instead of a separate `TopMost` window.
