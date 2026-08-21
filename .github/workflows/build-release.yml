@@ -31,6 +31,10 @@ jobs:
           "version=$version" >> $env:GITHUB_OUTPUT
           "tag=v$version" >> $env:GITHUB_OUTPUT
 
+      - name: Generate application icon
+        shell: pwsh
+        run: .\generate-icon.ps1
+
       - name: Restore
         run: dotnet restore SlimMonitorPC.csproj
 
@@ -44,6 +48,34 @@ jobs:
           -p:PublishTrimmed=false
           -p:EnableCompressionInSingleFile=true
           -o publish
+
+      - name: Startup self-test
+        shell: pwsh
+        run: |
+          $exe = (Resolve-Path 'publish\SlimMonitorPC.exe').Path
+          $process = Start-Process -FilePath $exe -ArgumentList '--self-test' -PassThru -Wait
+          if ($process.ExitCode -ne 0) {
+            throw "Startup self-test failed with exit code $($process.ExitCode)."
+          }
+
+      - name: Verify embedded icon
+        shell: pwsh
+        run: |
+          Add-Type -AssemblyName System.Drawing
+          $exe = (Resolve-Path 'publish\SlimMonitorPC.exe').Path
+          $icon = [System.Drawing.Icon]::ExtractAssociatedIcon($exe)
+          if ($null -eq $icon) {
+            throw 'The published EXE does not expose an embedded application icon.'
+          }
+          try {
+            if ($icon.Width -lt 16 -or $icon.Height -lt 16) {
+              throw "Unexpected embedded icon size: $($icon.Width)x$($icon.Height)."
+            }
+            Write-Host "Embedded icon verified: $($icon.Width)x$($icon.Height)"
+          }
+          finally {
+            $icon.Dispose()
+          }
 
       - name: Prepare release files
         shell: pwsh
