@@ -16,11 +16,11 @@
     <PublishTrimmed>false</PublishTrimmed>
     <DebugType>none</DebugType>
     <DebugSymbols>false</DebugSymbols>
-    <Version>0.2.3</Version>
-    <AssemblyVersion>0.2.3.0</AssemblyVersion>
-    <FileVersion>0.2.3.0</FileVersion>
+    <Version>0.2.4</Version>
+    <AssemblyVersion>0.2.4.0</AssemblyVersion>
+    <FileVersion>0.2.4.0</FileVersion>
     <Product>Slim Monitor PC</Product>
-    <Description>Wi-Fi traffic meter integrated with the Windows taskbar clock and calendar area.</Description>
+    <Description>Wi-Fi traffic meter integrated natively into the Windows taskbar clock and calendar area.</Description>
     <Company>IMC93Labs</Company>
     <Authors>IMC93Labs</Authors>
   </PropertyGroup>
