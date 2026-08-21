@@ -1,19 +1,22 @@
-# Slim Monitor PC v0.2.0
+# Slim Monitor PC v0.2.1
 
-A major taskbar-integration redesign focused on making Slim Monitor PC feel like part of Windows instead of an extra meter beside it.
+Hotfix release for the v0.2 taskbar redesign.
 
-## Highlights
+## Fixed
 
-- Unified two-row block using the Windows clock/date/notification area.
-- Time and date remain on the right, while live Wi-Fi download/upload speed is shown on the left.
-- Automatic sizing avoids the clipped speed text seen in v0.1.1.
-- The far-right **Show desktop** strip remains usable.
-- Left-click opens a built-in Windows 11-style calendar, independent of the system calendar flyout.
-- Calendar supports previous/next month, day selection, mouse wheel navigation and **Hoy / Today**.
-- Right-click keeps **Start with Windows**, calendar, realignment and exit controls.
-- Same lightweight Wi-Fi counter approach; no packet capture, drivers or admin rights.
-- Same simple upload/download arrows icon embedded in the single EXE.
+- Fixed the startup crash that caused v0.2.0 to close before showing anything on the taskbar.
+- Startup failures are no longer silent: an error dialog is shown and a diagnostic log is saved under `%LOCALAPPDATA%\IMC93Labs\SlimMonitorPC\startup-error.log`.
+- The final EXE now uses the intended simple upload/download arrows icon (`⇅` style).
 
-## Download
+## Validation added
 
-Download `SlimMonitorPC.exe` from the release assets. It is a self-contained Windows x64 single-file executable and does not require a .NET installation on the destination PC.
+- The published EXE must pass a real `--self-test` startup check on the Windows GitHub Actions runner.
+- The build also verifies that Windows can extract an embedded icon from the final `SlimMonitorPC.exe`.
+- A release is not published if either validation fails.
+
+## Included from v0.2.0
+
+- Unified taskbar block with live Wi-Fi download/upload speed, current time and date.
+- Built-in Windows 11-style calendar opened with left click.
+- Right-click menu with **Start with Windows**, calendar, realignment and exit.
+- Self-contained Windows x64 single-file executable; no separate .NET installation is required.

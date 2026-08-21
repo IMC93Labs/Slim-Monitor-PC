@@ -1,6 +1,9 @@
 bin/
 obj/
 release/
+publish/
+dist/
+Assets/app.generated.ico
 .vs/
 *.user
 *.suo
