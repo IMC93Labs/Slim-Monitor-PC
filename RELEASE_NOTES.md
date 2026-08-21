@@ -1,22 +1,20 @@
-# Slim Monitor PC v0.2.1
+# Slim Monitor PC v0.2.2
 
-Hotfix release for the v0.2 taskbar redesign.
+Visual fit update for the unified Windows taskbar block.
 
 ## Fixed
 
-- Fixed the startup crash that caused v0.2.0 to close before showing anything on the taskbar.
-- Startup failures are no longer silent: an error dialog is shown and a diagnostic log is saved under `%LOCALAPPDATA%\IMC93Labs\SlimMonitorPC\startup-error.log`.
-- The final EXE now uses the intended simple upload/download arrows icon (`⇅` style).
+- Corrected excessive width on systems using Windows display scaling. Taskbar coordinates are now treated as the physical pixels Windows already reports, avoiding double DPI scaling.
+- The Slim Monitor PC block is now constrained to the clock/date zone and no longer reaches left far enough to cover Wi-Fi, Bluetooth or other tray icons.
+- The far-right **Show desktop** strip remains free.
+- The block is inset vertically so it stays fully inside the taskbar instead of appearing to protrude above it.
 
-## Validation added
+## Visual changes
 
-- The published EXE must pass a real `--self-test` startup check on the Windows GitHub Actions runner.
-- The build also verifies that Windows can extract an embedded icon from the final `SlimMonitorPC.exe`.
-- A release is not published if either validation fails.
+- Time is larger and easier to read.
+- Date is also larger and uses a fixed `dd/MM/yyyy` layout.
+- Network speed remains on the left in a slightly smaller column so the clock/date remain visually dominant.
 
-## Included from v0.2.0
+## Validation
 
-- Unified taskbar block with live Wi-Fi download/upload speed, current time and date.
-- Built-in Windows 11-style calendar opened with left click.
-- Right-click menu with **Start with Windows**, calendar, realignment and exit.
-- Self-contained Windows x64 single-file executable; no separate .NET installation is required.
+The v0.2.1 release safeguards remain enabled: the Windows CI build must pass the executable startup self-test and confirm that the final single-file EXE exposes its embedded application icon before release.
