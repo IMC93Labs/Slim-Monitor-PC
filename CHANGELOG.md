@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.2.1 — 2026-08-21
+
+- Fix the v0.2.0 startup crash that closed the app before anything appeared on the taskbar.
+- Replace the broken startup path with the stable unified `TaskbarMonitorForm`.
+- Add visible fatal-error reporting plus `%LOCALAPPDATA%\IMC93Labs\SlimMonitorPC\startup-error.log` so startup failures no longer happen silently.
+- Add a `--self-test` startup mode and require it to pass in GitHub Actions before a release can be published.
+- Generate and embed the simple upload/download arrows icon (`⇅` style) used for Slim Monitor PC.
+- Add CI verification that the final published EXE exposes an embedded Windows icon.
+- Keep the unified clock/date/network block, built-in calendar and Start with Windows behavior introduced in v0.2.0.
+
 ## 0.2.0 — 2026-08-21
 
 - Redesign the taskbar UI as one unified clock/date/network block.
@@ -10,7 +20,6 @@
 - Left click now toggles the calendar; right click keeps the application menu.
 - Remove free dragging because the block is now intentionally anchored to the clock area.
 - Keep Start with Windows, Wi-Fi detection, session totals and top-most stability.
-- Keep the original simple upload/download arrows icon as the EXE icon.
 
 ## 0.1.1 — 2026-08-21
 
