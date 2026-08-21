@@ -1,18 +1,19 @@
-# Slim Monitor PC v0.1.1
+# Slim Monitor PC v0.2.0
 
-A compactness and interaction update focused on the Windows taskbar experience.
+A major taskbar-integration redesign focused on making Slim Monitor PC feel like part of Windows instead of an extra meter beside it.
 
-## Changes
+## Highlights
 
-- Much narrower meter: approximately 96 px instead of 180 px.
-- Two-line display keeps download and upload easy to read in less space.
-- Drag the meter with the **left mouse button** to place it anywhere along the taskbar, including on top of taskbar icons.
-- The selected position is saved and restored on the next launch.
-- **Reset position** is available from the right-click menu.
-- Fixed the meter appearing to disappear after a click when Explorer/taskbar moved above it in the Z-order.
-- Left click never hides or closes the application.
-- Existing **Start with Windows** support is retained.
+- Unified two-row block using the Windows clock/date/notification area.
+- Time and date remain on the right, while live Wi-Fi download/upload speed is shown on the left.
+- Automatic sizing avoids the clipped speed text seen in v0.1.1.
+- The far-right **Show desktop** strip remains usable.
+- Left-click opens a built-in Windows 11-style calendar, independent of the system calendar flyout.
+- Calendar supports previous/next month, day selection, mouse wheel navigation and **Hoy / Today**.
+- Right-click keeps **Start with Windows**, calendar, realignment and exit controls.
+- Same lightweight Wi-Fi counter approach; no packet capture, drivers or admin rights.
+- Same simple upload/download arrows icon embedded in the single EXE.
 
 ## Download
 
-Download `SlimMonitorPC.exe` from the release assets. It is still a self-contained Windows x64 single-file executable and does not require a separate .NET installation.
+Download `SlimMonitorPC.exe` from the release assets. It is a self-contained Windows x64 single-file executable and does not require a .NET installation on the destination PC.
