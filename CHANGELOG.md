@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.2.3 — 2026-08-21
+
+- Hide Slim Monitor PC whenever the Windows taskbar is not actually visible, including auto-hide states.
+- Detect fullscreen foreground applications and games and hide the overlay so it never remains above gameplay.
+- Restore the overlay automatically when returning to the desktop or when the taskbar becomes visible again.
+- Stop forcing `SWP_SHOWWINDOW` every 500 ms; this removes the visible flicker caused by Windows **Show desktop** transitions.
+- Keep only a low-frequency Z-order refresh while the taskbar is visible.
+- Close the custom calendar automatically if the taskbar becomes hidden or a fullscreen application takes over.
+- Preserve the v0.2.2 layout fixes: larger time/date, corrected DPI sizing and no overlap with Wi-Fi/volume/battery tray icons.
+
 ## 0.2.2 — 2026-08-21
 
 - Fix the unified taskbar block becoming too wide on displays using Windows DPI scaling.
