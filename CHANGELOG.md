@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.2.0 — 2026-08-21
+
+- Redesign the taskbar UI as one unified clock/date/network block.
+- Overlay the native clock/date/notification zone while keeping the Show desktop strip free.
+- Add current time and date beside live Wi-Fi download/upload rates.
+- Add adaptive text sizing so network values are not clipped.
+- Add a Windows 11-style calendar popup with month navigation and Today action.
+- Left click now toggles the calendar; right click keeps the application menu.
+- Remove free dragging because the block is now intentionally anchored to the clock area.
+- Keep Start with Windows, Wi-Fi detection, session totals and top-most stability.
+- Keep the original simple upload/download arrows icon as the EXE icon.
+
 ## 0.1.1 — 2026-08-21
 
 - Reduced the meter width from 180 px to a compact ~96 px layout.
