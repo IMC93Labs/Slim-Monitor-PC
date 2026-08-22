@@ -5,7 +5,7 @@ using System.Windows.Forms;
 namespace SlimMonitorPC;
 
 /// <summary>
-/// Safe v0.2.11 UI-only refinement layered on top of the proven v0.2.8 shell behavior.
+/// Safe UI-only refinement layered on top of the proven v0.2.8 shell behavior.
 /// It deliberately avoids DWM, Explorer hooks, cloaking APIs and aggressive Z-order timers.
 /// </summary>
 internal sealed class TaskbarV0211SafeRefinement : IDisposable
@@ -69,9 +69,9 @@ internal sealed class TaskbarV0211SafeRefinement : IDisposable
 
         _layout.Padding = new Padding(4, 0, 3, 0);
         _layout.ColumnStyles[0].SizeType = SizeType.Percent;
-        _layout.ColumnStyles[0].Width = 41.5f;
+        _layout.ColumnStyles[0].Width = 40.0f;
         _layout.ColumnStyles[1].SizeType = SizeType.Percent;
-        _layout.ColumnStyles[1].Width = 58.5f;
+        _layout.ColumnStyles[1].Width = 60.0f;
 
         _sourceDownload = _layout.GetControlFromPosition(0, 0) as Label;
         _sourceUpload = _layout.GetControlFromPosition(0, 1) as Label;
@@ -79,7 +79,7 @@ internal sealed class TaskbarV0211SafeRefinement : IDisposable
         var time = _layout.GetControlFromPosition(1, 0) as Label;
         var date = _layout.GetControlFromPosition(1, 1) as Label;
         SetFont(time, 10.4f);
-        SetFont(date, 8.45f);
+        SetFont(date, 8.15f);
 
         if (_sourceDownload is not null)
         {
@@ -166,7 +166,7 @@ internal sealed class TaskbarV0211SafeRefinement : IDisposable
         private readonly string _arrow;
         private string _value = "0";
         private string _unit = "B/s";
-        private readonly Font _font = new("Segoe UI", 6.15f, FontStyle.Regular, GraphicsUnit.Point);
+        private readonly Font _font = new("Segoe UI", 5.85f, FontStyle.Regular, GraphicsUnit.Point);
 
         internal RateCell(string arrow)
         {
@@ -205,8 +205,8 @@ internal sealed class TaskbarV0211SafeRefinement : IDisposable
         {
             base.OnPaint(e);
 
-            var arrowWidth = 9;
-            var unitWidth = Math.Min(27, Math.Max(21, Width / 3));
+            var arrowWidth = 8;
+            var unitWidth = Math.Min(29, Math.Max(25, Width / 3));
             var gap = 1;
             var valueWidth = Math.Max(12, Width - arrowWidth - gap - unitWidth);
 
