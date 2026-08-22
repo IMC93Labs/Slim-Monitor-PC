@@ -31,10 +31,10 @@ internal static class Program
             if (selfTest)
             {
                 using var form = new TaskbarOverlayFormV027();
-                using var integration = TaskbarV028Integration.Attach(form);
-                using var safeRefinement = TaskbarV0211SafeRefinement.Attach(form, integration);
-                using var v0213Integration = TaskbarV0213Integration.Attach(form);
-                using var v0213ExactColour = TaskbarV0213ExactColour.Attach(form, v0213Integration);
+                using var testV028Integration = TaskbarV028Integration.Attach(form);
+                using var testSafeRefinement = TaskbarV0211SafeRefinement.Attach(form, testV028Integration);
+                using var testV0213Integration = TaskbarV0213Integration.Attach(form);
+                using var testV0213ExactColour = TaskbarV0213ExactColour.Attach(form, testV0213Integration);
                 _ = form.Handle;
                 return;
             }
