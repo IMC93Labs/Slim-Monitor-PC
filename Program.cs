@@ -32,6 +32,7 @@ internal static class Program
             {
                 using var form = new TaskbarOverlayFormV027();
                 using var integration = TaskbarV028Integration.Attach(form);
+                using var refinement = TaskbarV029Refinement.Attach(form);
                 _ = form.Handle;
                 return;
             }
@@ -41,6 +42,7 @@ internal static class Program
 
             using var mainForm = new TaskbarOverlayFormV027();
             using var v028Integration = TaskbarV028Integration.Attach(mainForm);
+            using var v029Refinement = TaskbarV029Refinement.Attach(mainForm);
             Application.Run(mainForm);
         }
         catch (Exception ex)
