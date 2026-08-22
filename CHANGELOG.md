@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.7 — 2026-08-22
+
+- Keep the exact total width from v0.2.6 while lowering the block a few pixels so it stays inside the visible taskbar.
+- Trim only the top edge and keep the bottom covered so the native Windows date remains hidden underneath.
+- Rebalance the same width and slightly reduce the rate font so `B/s`, `KB/s`, `MB/s` and `GB/s` remain visible.
+- Make `Shell_TrayWnd` the native owner of the top-level overlay without using child-window embedding.
+- Ignore minimize system commands sent during **Show desktop** and recover immediately if Windows nevertheless reports a minimized state.
+- Replace the taskbar probe heuristic with direct fullscreen coverage detection, avoiding hide/show transitions for normal maximized windows while still hiding over real fullscreen games.
+
 ## 0.2.6 — 2026-08-21
 
 - Increase the unified block slightly so it fully covers the native Windows clock/date underneath instead of leaving part of the original date visible.
