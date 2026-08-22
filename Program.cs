@@ -31,13 +31,17 @@ internal static class Program
             if (selfTest)
             {
                 using var form = new TaskbarOverlayFormV027();
+                using var integration = TaskbarV028Integration.Attach(form);
                 _ = form.Handle;
                 return;
             }
 
             Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
             Application.ThreadException += (_, e) => ReportFatal(e.Exception, showDialog: true);
-            Application.Run(new TaskbarOverlayFormV027());
+
+            using var mainForm = new TaskbarOverlayFormV027();
+            using var v028Integration = TaskbarV028Integration.Attach(mainForm);
+            Application.Run(mainForm);
         }
         catch (Exception ex)
         {
