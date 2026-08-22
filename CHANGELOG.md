@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.2.12 — 2026-08-22
+
+- Register the existing overlay with the documented Windows appbar service using `SHAppBarMessage(ABM_NEW)` so **Show desktop** can classify it as taskbar-style infrastructure rather than a normal application window.
+- Do not call `ABM_SETPOS`, reserve desktop work area, inject into Explorer, subclass the taskbar, or add DWM cloak/Peek hooks.
+- Preserve the v0.2.8 visibility/fullscreen path and the lightweight v0.2.11 hover correction.
+- Keep fixed arrow/value/unit rate cells, widen the unit segment and slightly reduce the rate font so `B/s`, `KB/s`, `MB/s` and `GB/s` are not clipped.
+- Give the time/date side a little more internal width and slightly reduce only the date font so the final date digit remains visible without changing the approved overall block width.
+- Unregister the appbar cleanly when the HWND is destroyed or the application exits.
+
+## 0.2.11 — 2026-08-22
+
+- Emergency rollback after v0.2.10 failed to display and slowed the Windows taskbar on the real test machine.
+- Restore the proven v0.2.8 shell integration path and remove v0.2.10 DWM cloak/Peek/transition behavior from the active runtime.
+- Keep the fixed arrow/value/unit traffic renderer from later versions.
+- Correct sticky hover with a lightweight 120 ms cursor-position check instead of additional shell/DWM hooks.
+
 ## 0.2.10 — 2026-08-22
 
 - Remove the stacked v0.2.8 + v0.2.9 shell integrations so only one visibility/Z-order coordinator can interact with Explorer.
