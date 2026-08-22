@@ -31,7 +31,8 @@ internal static class Program
             if (selfTest)
             {
                 using var form = new TaskbarOverlayFormV027();
-                using var refinement = TaskbarV029Refinement.Attach(form);
+                using var integration = TaskbarV028Integration.Attach(form);
+                using var safeRefinement = TaskbarV0211SafeRefinement.Attach(form, integration);
                 _ = form.Handle;
                 return;
             }
@@ -39,11 +40,9 @@ internal static class Program
             Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
             Application.ThreadException += (_, e) => ReportFatal(e.Exception, showDialog: true);
 
-            // v0.2.10 intentionally uses one shell integration layer only. Previous
-            // builds stacked v0.2.8 and v0.2.9 guards, which could fight each other
-            // during Show desktop and leave the hover state latched.
             using var mainForm = new TaskbarOverlayFormV027();
-            using var integration = TaskbarV029Refinement.Attach(mainForm);
+            using var v028Integration = TaskbarV028Integration.Attach(mainForm);
+            using var v0211SafeRefinement = TaskbarV0211SafeRefinement.Attach(mainForm, v028Integration);
             Application.Run(mainForm);
         }
         catch (Exception ex)
