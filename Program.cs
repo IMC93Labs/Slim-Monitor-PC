@@ -31,10 +31,8 @@ internal static class Program
             if (selfTest)
             {
                 using var form = new TaskbarOverlayFormV027();
-                using var testV028Integration = TaskbarV028Integration.Attach(form);
-                using var testSafeRefinement = TaskbarV0211SafeRefinement.Attach(form, testV028Integration);
-                using var testV0213Integration = TaskbarV0213Integration.Attach(form);
-                using var testV0213ExactColour = TaskbarV0213ExactColour.Attach(form, testV0213Integration);
+                using var integration = TaskbarV028Integration.Attach(form);
+                using var safeRefinement = TaskbarV0211SafeRefinement.Attach(form, integration);
                 _ = form.Handle;
                 return;
             }
@@ -45,8 +43,6 @@ internal static class Program
             using var mainForm = new TaskbarOverlayFormV027();
             using var v028Integration = TaskbarV028Integration.Attach(mainForm);
             using var v0211SafeRefinement = TaskbarV0211SafeRefinement.Attach(mainForm, v028Integration);
-            using var v0213Integration = TaskbarV0213Integration.Attach(mainForm);
-            using var v0213ExactColour = TaskbarV0213ExactColour.Attach(mainForm, v0213Integration);
             Application.Run(mainForm);
         }
         catch (Exception ex)
