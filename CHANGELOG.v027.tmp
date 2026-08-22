@@ -1,0 +1,6 @@
+0.2.7
+- Keep v0.2.6 width while lowering the overlay within the taskbar.
+- Preserve visible B/s, KB/s, MB/s and GB/s rate suffixes.
+- Make the taskbar the overlay owner without child-window embedding.
+- Prevent Show desktop minimization and recover minimized state.
+- Hide only when a real fullscreen foreground window covers the taskbar.
