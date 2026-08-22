@@ -1,26 +1,25 @@
-# Slim Monitor PC v0.2.13
+# Slim Monitor PC v0.2.14
 
-Windows 11 integration update based on the second real-system recording.
+Emergency stability hotfix after v0.2.13 caused Explorer/taskbar hangs on the real Windows 11 system.
 
-## Show desktop
+## Stability recovery
 
-- Removes the ineffective v0.2.12 appbar registration from the active runtime path.
-- Intercepts only left-clicks on the narrow Windows **Show desktop** strip at the far-right edge of the primary taskbar.
-- Reproduces the show/restore desktop action by minimizing/restoring normal top-level application windows while leaving Slim Monitor PC untouched.
-- This avoids the shell transition that was physically removing the overlay for several frames and exposing the native clock/date underneath.
-- No Explorer injection, no taskbar subclassing, no DWM cloak/Peek logic and no high-frequency shell timer are introduced.
+- Removes the global mouse hook used to intercept the Windows **Show desktop** strip.
+- Removes the custom minimize/restore emulation introduced in v0.2.13.
+- Removes screen-pixel taskbar colour sampling from the runtime path.
+- Returns to the proven v0.2.8 shell behavior plus the lightweight v0.2.11 UI refinement.
+- Does not inject into Explorer, subclass taskbar windows, use DWM cloak/Peek APIs, register an appbar or install any global input hook.
 
-## Exact taskbar colour
+## Safe colour correction
 
-- Samples the real composited taskbar pixels directly from the screen while excluding Slim Monitor PC itself.
-- Filters out coloured icons/text and chooses the dominant neutral background colour.
-- The latest recording measured the native taskbar at RGB 27,27,27 (#1B1B1B) while the previous overlay was around RGB 32,32,32; this version corrects that mismatch dynamically rather than hard-coding one grey.
+- On dark taskbars, uses the measured native Windows 11 taskbar colour from the real test system: RGB 27,27,27 (`#1B1B1B`).
+- No live screen sampling or shell calls are needed for the colour correction.
 
 ## Preserved
 
 - Stable fixed `arrow | value | unit` traffic rendering.
-- Complete B/s, KB/s, MB/s and GB/s suffixes.
-- Full dd/MM/yyyy date fit.
+- Complete `B/s`, `KB/s`, `MB/s` and `GB/s` suffixes.
+- Full `dd/MM/yyyy` date fit.
 - Lightweight hover correction.
 - Built-in calendar.
 - Right-click network/session details.
@@ -28,3 +27,5 @@ Windows 11 integration update based on the second real-system recording.
 - Centered executable icon.
 - Single-file, self-contained Windows x64 executable.
 - Startup self-test and embedded-icon validation in CI.
+
+Known limitation: the small native Windows **Show desktop** flash can still occur. Stability takes priority in this release; no shell interception is used to hide that transition.
