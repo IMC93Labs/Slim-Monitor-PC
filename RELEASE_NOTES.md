@@ -1,25 +1,24 @@
-# Slim Monitor PC v0.2.6
+# Slim Monitor PC v0.2.7
 
-Taskbar layout and **Show desktop** recovery update based on real Windows 11 testing.
+Real Windows 11 refinement for height, rate units and **Show desktop** stability.
 
 ## Fixed
 
-- The unified traffic/time/date block is slightly larger again so it fully covers the native Windows clock/date underneath instead of leaving part of the original date visible.
-- The block now uses the full taskbar height while still keeping the far-right **Show desktop** strip free.
-- Windows **Show desktop** can no longer leave Slim Monitor PC permanently hidden: the app now checks its real native visibility and repairs its Z-order only when Windows has actually moved it behind the desktop.
-- The taskbar-front detection now compares the owning Explorer process rather than requiring every Windows 11 XAML taskbar surface to have `Shell_TrayWnd` as its root window.
-- Normal window switching therefore does not trigger constant hide/show cycles, while a fullscreen game that really covers the taskbar can still hide the monitor.
-
-## Icon
-
-- Recentered the two upload/download arrows inside the executable icon so the symbol is visually centered instead of shifted to the right.
+- Keeps the same total width approved in v0.2.6.
+- Moves the overlay a few pixels down and reduces only its top edge so it no longer protrudes above the visible taskbar.
+- Keeps the bottom edge covered so the native Windows date remains hidden underneath.
+- Gives the network-rate column more usable space and uses a slightly smaller rate font so `B/s`, `KB/s`, `MB/s` and `GB/s` remain visible instead of being clipped.
+- Makes the taskbar the native owner of the overlay without turning the overlay into a child window. This is intended to keep Windows **Show desktop** from minimizing/hiding it during the desktop animation while avoiding the Windows 11 XAML problem seen in v0.2.4.
+- Ignores explicit minimize system commands for the taskbar overlay and immediately recovers if Windows nevertheless reports a minimized state.
+- Replaces the taskbar probe heuristic with direct fullscreen coverage detection: normal maximized windows no longer cause hide/show transitions, while a real fullscreen game covering the taskbar still hides the monitor.
 
 ## Preserved
 
-- Larger time and date.
+- Full unified traffic + time + date block.
 - No hover tooltip.
 - Right-click network/session information.
 - Built-in calendar on left click.
 - Start with Windows.
+- Centered upload/download executable icon.
 - Single-file, self-contained Windows x64 executable.
 - Startup self-test and embedded-icon validation in CI.
