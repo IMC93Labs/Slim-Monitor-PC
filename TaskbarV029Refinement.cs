@@ -1,17 +1,25 @@
 using System.Drawing;
+using System.Drawing.Drawing2D;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
 
 namespace SlimMonitorPC;
 
+/// <summary>
+/// v0.2.10 consolidation layer. It intentionally replaces the stacked v0.2.8 +
+/// v0.2.9 shell guards with one coordinator so Explorer is never being fought by
+/// multiple timers at once. It also owns the stable rate cells, pixel-matched
+/// taskbar background and hover state.
+/// </summary>
 internal sealed class TaskbarV029Refinement : IDisposable
 {
     private readonly TaskbarOverlayFormV027 _form;
     private readonly FieldInfo? _overlayShownField;
     private readonly MethodInfo? _toggleCalendarMethod;
-    private readonly System.Windows.Forms.Timer _guardTimer = new() { Interval = 12 };
-    private readonly System.Windows.Forms.Timer _colorTimer = new() { Interval = 750 };
+    private readonly WindowHook _hook;
+    private readonly System.Windows.Forms.Timer _guardTimer = new() { Interval = 35 };
+    private readonly System.Windows.Forms.Timer _colorTimer = new() { Interval = 1000 };
 
     private TableLayoutPanel? _layout;
     private Label? _sourceDownload;
@@ -20,6 +28,8 @@ internal sealed class TaskbarV029Refinement : IDisposable
     private RateCell? _uploadCell;
     private bool _restoringVisibility;
     private bool _applyingSampledColor;
+    private bool _hovered;
+    private bool _cloakNotificationsRegistered;
     private bool _disposed;
 
     private TaskbarV029Refinement(TaskbarOverlayFormV027 form)
@@ -27,16 +37,23 @@ internal sealed class TaskbarV029Refinement : IDisposable
         _form = form;
         _overlayShownField = typeof(TaskbarOverlayFormV027).GetField("_overlayShown", BindingFlags.Instance | BindingFlags.NonPublic);
         _toggleCalendarMethod = typeof(TaskbarOverlayFormV027).GetMethod("ToggleCalendar", BindingFlags.Instance | BindingFlags.NonPublic);
+        _hook = new WindowHook(this);
 
+        _form.HandleCreated += Form_HandleCreated;
+        _form.HandleDestroyed += Form_HandleDestroyed;
         _form.Shown += Form_Shown;
         _form.VisibleChanged += Form_VisibleChanged;
         _form.Resize += Form_Resize;
         _form.SizeChanged += Form_SizeChanged;
         _form.BackColorChanged += Form_BackColorChanged;
+        _form.Paint += Form_Paint;
         _form.FormClosed += (_, _) => Dispose();
 
-        _guardTimer.Tick += (_, _) => RecoverIfShellTransitioned();
+        _guardTimer.Tick += (_, _) => GuardTick();
         _colorTimer.Tick += (_, _) => ApplyTaskbarPixelColor();
+
+        if (_form.IsHandleCreated)
+            InstallNativeProtections();
     }
 
     internal static TaskbarV029Refinement Attach(TaskbarOverlayFormV027 form) => new(form);
@@ -47,11 +64,21 @@ internal sealed class TaskbarV029Refinement : IDisposable
         set => _overlayShownField?.SetValue(_form, value);
     }
 
+    private void Form_HandleCreated(object? sender, EventArgs e) => InstallNativeProtections();
+
+    private void Form_HandleDestroyed(object? sender, EventArgs e)
+    {
+        UnregisterCloakNotifications();
+        _hook.Release();
+    }
+
     private void Form_Shown(object? sender, EventArgs e)
     {
         InstallStableRateCells();
         ApplyTopVisualCrop();
+        InstallNativeProtections();
         ApplyTaskbarPixelColor();
+        UpdateHoverState();
         _guardTimer.Start();
         _colorTimer.Start();
     }
@@ -73,17 +100,110 @@ internal sealed class TaskbarV029Refinement : IDisposable
     private void Form_VisibleChanged(object? sender, EventArgs e)
     {
         if (!_form.Visible && ShouldOverlayBeVisible())
-            RestoreImmediately();
+            RestoreImmediately("VisibleChanged:hidden");
     }
 
     private void Form_Resize(object? sender, EventArgs e)
     {
         if (_form.WindowState == FormWindowState.Minimized && ShouldOverlayBeVisible())
-            RestoreImmediately();
+            RestoreImmediately("Resize:minimized");
+    }
+
+    private void GuardTick()
+    {
+        UpdateHoverState();
+        RecoverIfShellTransitioned();
+    }
+
+    private void UpdateHoverState()
+    {
+        if (_disposed || _form.IsDisposed)
+            return;
+
+        var hovered = _form.Visible && _form.Bounds.Contains(Control.MousePosition);
+        if (_hovered == hovered)
+            return;
+
+        _hovered = hovered;
+        _form.Invalidate(true);
+    }
+
+    private void Form_Paint(object? sender, PaintEventArgs e)
+    {
+        if (!_hovered || _form.ClientSize.Width < 12 || _form.ClientSize.Height < 12)
+            return;
+
+        e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+        var rect = Rectangle.Inflate(_form.ClientRectangle, -3, -2);
+        var light = _form.BackColor.GetBrightness() > 0.55f;
+        var hoverColor = light ? Color.FromArgb(226, 226, 226) : Color.FromArgb(52, 52, 52);
+
+        using var path = RoundedRect(rect, 7);
+        using var brush = new SolidBrush(hoverColor);
+        e.Graphics.FillPath(brush, path);
+    }
+
+    private static GraphicsPath RoundedRect(Rectangle rect, int radius)
+    {
+        var path = new GraphicsPath();
+        var d = radius * 2;
+        path.AddArc(rect.Left, rect.Top, d, d, 180, 90);
+        path.AddArc(rect.Right - d, rect.Top, d, d, 270, 90);
+        path.AddArc(rect.Right - d, rect.Bottom - d, d, d, 0, 90);
+        path.AddArc(rect.Left, rect.Bottom - d, d, d, 90, 90);
+        path.CloseFigure();
+        return path;
+    }
+
+    private void InstallNativeProtections()
+    {
+        if (_disposed || !_form.IsHandleCreated)
+            return;
+
+        _hook.Assign(_form.Handle);
+
+        // Supported DWM attributes intended specifically for tool/peek transitions.
+        // Applying these once is preferable to continuously fighting Explorer with
+        // SetWindowPos calls at very high frequency.
+        NativeMethods.TrySetDwmBool(_form.Handle, NativeMethods.DWMWA_TRANSITIONS_FORCEDISABLED, true);
+        NativeMethods.TrySetDwmBool(_form.Handle, NativeMethods.DWMWA_DISALLOW_PEEK, true);
+        NativeMethods.TrySetDwmBool(_form.Handle, NativeMethods.DWMWA_EXCLUDED_FROM_PEEK, true);
+        NativeMethods.TrySetDwmBool(_form.Handle, NativeMethods.DWMWA_CLOAK, false);
+
+        RegisterCloakNotifications();
+    }
+
+    private void RegisterCloakNotifications()
+    {
+        if (_cloakNotificationsRegistered || !_form.IsHandleCreated)
+            return;
+
+        try
+        {
+            _cloakNotificationsRegistered = NativeMethods.RegisterCloakedNotification(_form.Handle, true);
+        }
+        catch (EntryPointNotFoundException)
+        {
+            // RegisterCloakedNotification is Windows 11-only. The rest of the DWM
+            // protections remain valid if the function is absent.
+        }
+    }
+
+    private void UnregisterCloakNotifications()
+    {
+        if (!_cloakNotificationsRegistered || !_form.IsHandleCreated)
+            return;
+
+        try { NativeMethods.RegisterCloakedNotification(_form.Handle, false); }
+        catch (EntryPointNotFoundException) { }
+        _cloakNotificationsRegistered = false;
     }
 
     private void InstallStableRateCells()
     {
+        if (_layout is not null)
+            return;
+
         _layout = FindDescendants(_form).OfType<TableLayoutPanel>().FirstOrDefault();
         if (_layout is null || _layout.ColumnStyles.Count < 2)
             return;
@@ -197,7 +317,7 @@ internal sealed class TaskbarV029Refinement : IDisposable
         }
     }
 
-    private static bool TrySampleTaskbarColor(Rectangle taskbar, out Color color)
+    private bool TrySampleTaskbarColor(Rectangle taskbar, out Color color)
     {
         color = Color.Empty;
         var dc = NativeMethods.GetDC(IntPtr.Zero);
@@ -206,31 +326,37 @@ internal sealed class TaskbarV029Refinement : IDisposable
 
         try
         {
-            var samples = new List<Color>(32);
+            var samples = new List<Color>(160);
             if (taskbar.Width >= taskbar.Height)
             {
-                var xs = new[] { taskbar.Right - 2, taskbar.Right - 3, taskbar.Right - 4, taskbar.Right - 5, taskbar.Right - 6 };
+                // Sample two thin background bands across the whole taskbar and use
+                // the median. This is robust against icons/hover states and, unlike
+                // v0.2.9, does not depend on the Show desktop strip being idle.
+                var step = Math.Max(14, taskbar.Width / 80);
                 var ys = new[]
                 {
-                    taskbar.Top + Math.Max(4, taskbar.Height / 5),
-                    taskbar.Top + Math.Max(6, taskbar.Height * 2 / 5),
-                    taskbar.Top + Math.Max(8, taskbar.Height * 3 / 5),
-                    taskbar.Bottom - Math.Max(5, taskbar.Height / 5)
+                    taskbar.Top + Math.Min(5, Math.Max(2, taskbar.Height / 8)),
+                    taskbar.Bottom - Math.Min(5, Math.Max(2, taskbar.Height / 8)) - 1
                 };
-                foreach (var x in xs)
-                foreach (var y in ys)
-                    AddPixelSample(dc, x, y, samples);
+
+                for (var x = taskbar.Left + 10; x < taskbar.Right - 12; x += step)
+                {
+                    if (x >= _form.Left - 12 && x <= _form.Right + 12)
+                        continue;
+                    foreach (var y in ys)
+                        AddPixelSample(dc, x, y, samples);
+                }
             }
             else
             {
-                var xs = new[] { taskbar.Left + taskbar.Width / 3, taskbar.Left + taskbar.Width * 2 / 3 };
-                var ys = new[] { taskbar.Top + 6, taskbar.Top + 12, taskbar.Bottom - 6, taskbar.Bottom - 12 };
-                foreach (var x in xs)
-                foreach (var y in ys)
-                    AddPixelSample(dc, x, y, samples);
+                var step = Math.Max(14, taskbar.Height / 60);
+                var xs = new[] { taskbar.Left + 4, taskbar.Right - 5 };
+                for (var y = taskbar.Top + 10; y < taskbar.Bottom - 10; y += step)
+                    foreach (var x in xs)
+                        AddPixelSample(dc, x, y, samples);
             }
 
-            if (samples.Count < 3)
+            if (samples.Count < 6)
                 return false;
 
             var rs = samples.Select(c => (int)c.R).OrderBy(v => v).ToArray();
@@ -264,9 +390,19 @@ internal sealed class TaskbarV029Refinement : IDisposable
 
         LogicalOverlayShown = true;
 
+        if (TryGetCloakedState(out var cloaked) && cloaked != 0)
+        {
+            // A shell cloak is composition-level hiding: IsWindowVisible can remain
+            // true, which is why the older visibility timers could not prevent the
+            // native clock flashing through in the user's recording.
+            NativeMethods.TrySetDwmBool(_form.Handle, NativeMethods.DWMWA_CLOAK, false);
+            RestoreImmediately($"DWM cloak={cloaked}");
+            return;
+        }
+
         if (!_form.Visible || NativeMethods.IsIconic(_form.Handle) || !NativeMethods.IsWindowVisible(_form.Handle))
         {
-            RestoreImmediately();
+            RestoreImmediately("hidden/minimized");
             return;
         }
 
@@ -283,7 +419,24 @@ internal sealed class TaskbarV029Refinement : IDisposable
         }
     }
 
-    private void RestoreImmediately()
+    private bool TryGetCloakedState(out int cloaked)
+    {
+        cloaked = 0;
+        try
+        {
+            return NativeMethods.DwmGetWindowAttribute(
+                _form.Handle,
+                NativeMethods.DWMWA_CLOAKED,
+                out cloaked,
+                sizeof(int)) == 0;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private void RestoreImmediately(string reason)
     {
         if (_restoringVisibility || _disposed || _form.IsDisposed || !_form.IsHandleCreated)
             return;
@@ -292,6 +445,7 @@ internal sealed class TaskbarV029Refinement : IDisposable
         try
         {
             LogicalOverlayShown = true;
+            NativeMethods.TrySetDwmBool(_form.Handle, NativeMethods.DWMWA_CLOAK, false);
             if (_form.WindowState == FormWindowState.Minimized)
                 _form.WindowState = FormWindowState.Normal;
             NativeMethods.ShowWindow(_form.Handle, NativeMethods.SW_SHOWNOACTIVATE);
@@ -303,10 +457,33 @@ internal sealed class TaskbarV029Refinement : IDisposable
                 NativeMethods.SWP_NOSIZE |
                 NativeMethods.SWP_NOACTIVATE |
                 NativeMethods.SWP_SHOWWINDOW);
+            LogShellRecovery(reason);
         }
         finally
         {
             _restoringVisibility = false;
+        }
+    }
+
+    private void LogShellRecovery(string reason)
+    {
+        try
+        {
+            var folder = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "IMC93Labs",
+                "SlimMonitorPC");
+            Directory.CreateDirectory(folder);
+            var foreground = NativeMethods.GetForegroundWindow();
+            var cls = foreground == IntPtr.Zero ? "none" : NativeMethods.GetWindowClassName(foreground);
+            TryGetCloakedState(out var cloaked);
+            File.AppendAllText(
+                Path.Combine(folder, "shell-state.log"),
+                $"{DateTime.Now:O} recovery={reason}; visible={_form.Visible}; nativeVisible={NativeMethods.IsWindowVisible(_form.Handle)}; iconic={NativeMethods.IsIconic(_form.Handle)}; cloaked={cloaked}; foreground={cls}{Environment.NewLine}");
+        }
+        catch
+        {
+            // Diagnostics must never affect the taskbar overlay.
         }
     }
 
@@ -399,7 +576,11 @@ internal sealed class TaskbarV029Refinement : IDisposable
     {
         bounds = Rectangle.Empty;
         var extended = new NativeMethods.RECT();
-        var hr = NativeMethods.DwmGetWindowAttribute(window, NativeMethods.DWMWA_EXTENDED_FRAME_BOUNDS, out extended, Marshal.SizeOf<NativeMethods.RECT>());
+        var hr = NativeMethods.DwmGetWindowAttribute(
+            window,
+            NativeMethods.DWMWA_EXTENDED_FRAME_BOUNDS,
+            out extended,
+            Marshal.SizeOf<NativeMethods.RECT>());
         if (hr == 0 && extended.Right > extended.Left && extended.Bottom > extended.Top)
         {
             bounds = Rectangle.FromLTRB(extended.Left, extended.Top, extended.Right, extended.Bottom);
@@ -431,17 +612,80 @@ internal sealed class TaskbarV029Refinement : IDisposable
         _colorTimer.Stop();
         _guardTimer.Dispose();
         _colorTimer.Dispose();
+        UnregisterCloakNotifications();
+        _hook.Release();
 
         if (_sourceDownload is not null)
             _sourceDownload.TextChanged -= SourceDownload_TextChanged;
         if (_sourceUpload is not null)
             _sourceUpload.TextChanged -= SourceUpload_TextChanged;
 
+        _form.HandleCreated -= Form_HandleCreated;
+        _form.HandleDestroyed -= Form_HandleDestroyed;
         _form.Shown -= Form_Shown;
         _form.VisibleChanged -= Form_VisibleChanged;
         _form.Resize -= Form_Resize;
         _form.SizeChanged -= Form_SizeChanged;
         _form.BackColorChanged -= Form_BackColorChanged;
+        _form.Paint -= Form_Paint;
+    }
+
+    private sealed class WindowHook : NativeWindow
+    {
+        private readonly TaskbarV029Refinement _owner;
+
+        internal WindowHook(TaskbarV029Refinement owner) => _owner = owner;
+
+        internal void Assign(IntPtr handle)
+        {
+            if (Handle == handle)
+                return;
+            if (Handle != IntPtr.Zero)
+                ReleaseHandle();
+            AssignHandle(handle);
+        }
+
+        internal void Release()
+        {
+            if (Handle != IntPtr.Zero)
+                ReleaseHandle();
+        }
+
+        protected override void WndProc(ref Message m)
+        {
+            if (m.Msg == NativeMethods.WM_SYSCOMMAND &&
+                (m.WParam.ToInt64() & 0xFFF0) == NativeMethods.SC_MINIMIZE &&
+                _owner.ShouldOverlayBeVisible())
+            {
+                _owner.LogicalOverlayShown = true;
+                return;
+            }
+
+            if (m.Msg == NativeMethods.WM_WINDOWPOSCHANGING && m.LParam != IntPtr.Zero && _owner.ShouldOverlayBeVisible())
+            {
+                var pos = Marshal.PtrToStructure<NativeMethods.WINDOWPOS>(m.LParam);
+                if ((pos.flags & NativeMethods.SWP_HIDEWINDOW) != 0)
+                    pos.flags &= ~NativeMethods.SWP_HIDEWINDOW;
+
+                pos.flags &= ~NativeMethods.SWP_NOZORDER;
+                pos.hwndInsertAfter = NativeMethods.HWND_TOPMOST;
+                _owner.LogicalOverlayShown = true;
+                Marshal.StructureToPtr(pos, m.LParam, false);
+            }
+
+            if (m.Msg == NativeMethods.WM_CLOAKED_STATE_CHANGED && m.WParam.ToInt64() != 0 && _owner.ShouldOverlayBeVisible())
+            {
+                _owner.LogicalOverlayShown = true;
+                NativeMethods.TrySetDwmBool(_owner._form.Handle, NativeMethods.DWMWA_CLOAK, false);
+                _owner._form.BeginInvoke((Action)(() => _owner.RestoreImmediately($"WM_CLOAKED_STATE_CHANGED:{m.WParam.ToInt64()}")));
+                return;
+            }
+
+            base.WndProc(ref m);
+
+            if (m.Msg == NativeMethods.WM_SIZE && m.WParam.ToInt64() == NativeMethods.SIZE_MINIMIZED && _owner.ShouldOverlayBeVisible())
+                _owner.RestoreImmediately("WM_SIZE:minimized");
+        }
     }
 
     private sealed class RateCell : Control
@@ -505,13 +749,26 @@ internal sealed class TaskbarV029Refinement : IDisposable
 
     private static class NativeMethods
     {
+        internal const int DWMWA_TRANSITIONS_FORCEDISABLED = 3;
         internal const int DWMWA_EXTENDED_FRAME_BOUNDS = 9;
+        internal const int DWMWA_DISALLOW_PEEK = 11;
+        internal const int DWMWA_EXCLUDED_FROM_PEEK = 12;
+        internal const int DWMWA_CLOAK = 13;
+        internal const int DWMWA_CLOAKED = 14;
+        internal const int WM_SIZE = 0x0005;
+        internal const int WM_WINDOWPOSCHANGING = 0x0046;
+        internal const int WM_SYSCOMMAND = 0x0112;
+        internal const int WM_CLOAKED_STATE_CHANGED = 0x0347;
+        internal const int SC_MINIMIZE = 0xF020;
+        internal const int SIZE_MINIMIZED = 1;
         internal const int SW_SHOWNOACTIVATE = 4;
         internal const uint GA_ROOT = 2;
         internal const uint SWP_NOSIZE = 0x0001;
         internal const uint SWP_NOMOVE = 0x0002;
+        internal const uint SWP_NOZORDER = 0x0004;
         internal const uint SWP_NOACTIVATE = 0x0010;
         internal const uint SWP_SHOWWINDOW = 0x0040;
+        internal const uint SWP_HIDEWINDOW = 0x0080;
         internal static readonly IntPtr HWND_TOPMOST = new(-1);
 
         [DllImport("user32.dll", CharSet = CharSet.Unicode)]
@@ -541,19 +798,52 @@ internal sealed class TaskbarV029Refinement : IDisposable
         internal static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
         [DllImport("user32.dll", CharSet = CharSet.Unicode)]
         private static extern int GetClassName(IntPtr hWnd, System.Text.StringBuilder className, int maxCount);
-        internal static string GetWindowClassName(IntPtr hWnd)
-        {
-            var text = new System.Text.StringBuilder(256);
-            return GetClassName(hWnd, text, text.Capacity) > 0 ? text.ToString() : string.Empty;
-        }
+        [DllImport("user32.dll", EntryPoint = "RegisterCloakedNotification", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        internal static extern bool RegisterCloakedNotification(IntPtr hWnd, [MarshalAs(UnmanagedType.Bool)] bool register);
         [DllImport("dwmapi.dll")]
         internal static extern int DwmGetWindowAttribute(IntPtr hWnd, int attribute, out RECT value, int size);
+        [DllImport("dwmapi.dll")]
+        internal static extern int DwmGetWindowAttribute(IntPtr hWnd, int attribute, out int value, int size);
+        [DllImport("dwmapi.dll")]
+        private static extern int DwmSetWindowAttribute(IntPtr hWnd, int attribute, ref int value, int size);
         [DllImport("user32.dll")]
         internal static extern IntPtr GetDC(IntPtr hWnd);
         [DllImport("user32.dll")]
         internal static extern int ReleaseDC(IntPtr hWnd, IntPtr hDC);
         [DllImport("gdi32.dll")]
         internal static extern uint GetPixel(IntPtr hDC, int x, int y);
+
+        internal static string GetWindowClassName(IntPtr hWnd)
+        {
+            var text = new System.Text.StringBuilder(256);
+            return GetClassName(hWnd, text, text.Capacity) > 0 ? text.ToString() : string.Empty;
+        }
+
+        internal static bool TrySetDwmBool(IntPtr hWnd, int attribute, bool enabled)
+        {
+            try
+            {
+                var value = enabled ? 1 : 0;
+                return DwmSetWindowAttribute(hWnd, attribute, ref value, sizeof(int)) == 0;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        internal struct WINDOWPOS
+        {
+            public IntPtr hwnd;
+            public IntPtr hwndInsertAfter;
+            public int x;
+            public int y;
+            public int cx;
+            public int cy;
+            public uint flags;
+        }
 
         [StructLayout(LayoutKind.Sequential)]
         internal readonly struct POINT
