@@ -40,9 +40,19 @@ internal sealed class TaskbarV0211SafeRefinement : IDisposable
 
     private void Form_Shown(object? sender, EventArgs e)
     {
+        ApplySafeTaskbarColour();
         InstallStableRateCells();
         RefreshHoverState();
         _hoverTimer.Start();
+    }
+
+    private void ApplySafeTaskbarColour()
+    {
+        // The real Windows 11 test machine uses #1B1B1B for the dark taskbar.
+        // Use that known-good value directly instead of sampling screen pixels or
+        // touching Explorer. Light taskbars keep the normal application theme.
+        if (_form.BackColor.GetBrightness() < 0.5f)
+            _form.BackColor = Color.FromArgb(27, 27, 27);
     }
 
     private void RefreshHoverState()
