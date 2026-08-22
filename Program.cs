@@ -34,6 +34,7 @@ internal static class Program
                 using var integration = TaskbarV028Integration.Attach(form);
                 using var safeRefinement = TaskbarV0211SafeRefinement.Attach(form, integration);
                 using var v0213Integration = TaskbarV0213Integration.Attach(form);
+                using var v0213ExactColour = TaskbarV0213ExactColour.Attach(form, v0213Integration);
                 _ = form.Handle;
                 return;
             }
@@ -45,6 +46,7 @@ internal static class Program
             using var v028Integration = TaskbarV028Integration.Attach(mainForm);
             using var v0211SafeRefinement = TaskbarV0211SafeRefinement.Attach(mainForm, v028Integration);
             using var v0213Integration = TaskbarV0213Integration.Attach(mainForm);
+            using var v0213ExactColour = TaskbarV0213ExactColour.Attach(mainForm, v0213Integration);
             Application.Run(mainForm);
         }
         catch (Exception ex)
