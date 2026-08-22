@@ -1,31 +1,33 @@
-# Slim Monitor PC v0.2.14
+# Slim Monitor PC v0.2.15
 
-Emergency stability hotfix after v0.2.13 caused Explorer/taskbar hangs on the real Windows 11 system.
+Focused Windows 11 **Show desktop** flicker correction. No visual, layout, colour, network, calendar or Explorer-integration changes are included in this release.
 
-## Stability recovery
+## Flicker-only change
 
-- Removes the global mouse hook used to intercept the Windows **Show desktop** strip.
-- Removes the custom minimize/restore emulation introduced in v0.2.13.
-- Removes screen-pixel taskbar colour sampling from the runtime path.
-- Returns to the proven v0.2.8 shell behavior plus the lightweight v0.2.11 UI refinement.
-- Does not inject into Explorer, subclass taskbar windows, use DWM cloak/Peek APIs, register an appbar or install any global input hook.
+- Keeps the stable v0.2.14 runtime path unchanged.
+- Applies documented DWM attributes only to Slim Monitor PC's own HWND:
+  - `DWMWA_TRANSITIONS_FORCEDISABLED`
+  - `DWMWA_DISALLOW_PEEK`
+  - `DWMWA_EXCLUDED_FROM_PEEK`
+- The attributes are applied once when the Slim Monitor PC window handle is created and reapplied only if that handle is recreated.
+- No global mouse/keyboard hook.
+- No Explorer/taskbar subclassing or injection.
+- No DWM cloak manipulation.
+- No new polling/guard timer.
+- No custom Show desktop emulation.
 
-## Safe colour correction
+The purpose is to keep the overlay out of Windows Peek/Show-desktop visual transitions instead of trying to recover it after the shell has already removed it for a few frames.
 
-- On dark taskbars, uses the measured native Windows 11 taskbar colour from the real test system: RGB 27,27,27 (`#1B1B1B`).
-- No live screen sampling or shell calls are needed for the colour correction.
+## Unchanged from v0.2.14
 
-## Preserved
-
+- Size, position and taskbar colour.
 - Stable fixed `arrow | value | unit` traffic rendering.
 - Complete `B/s`, `KB/s`, `MB/s` and `GB/s` suffixes.
 - Full `dd/MM/yyyy` date fit.
-- Lightweight hover correction.
+- Hover behavior.
 - Built-in calendar.
 - Right-click network/session details.
 - Start with Windows.
 - Centered executable icon.
 - Single-file, self-contained Windows x64 executable.
 - Startup self-test and embedded-icon validation in CI.
-
-Known limitation: the small native Windows **Show desktop** flash can still occur. Stability takes priority in this release; no shell interception is used to hide that transition.
