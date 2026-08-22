@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.9 — 2026-08-22
+
+- Sample the actual composited Windows taskbar colour from the uncovered Show desktop strip and apply that RGB value to the overlay instead of relying only on a fixed grey.
+- Replace the two rate labels with fixed arrow/value/unit renderers so `B/s`, `KB/s`, `MB/s` and `GB/s` can never wrap onto another line or shift the numeric position when the scale changes.
+- Give the clock/date column the remaining width while keeping the approved overall block width unchanged.
+- Add an immediate visibility/minimize recovery path plus a 12 ms shell-transition guard to reduce the remaining single-frame flash when **Show desktop** is used.
+- Clip only two additional pixels from the top visual region so the overlay sits below the Windows 11 shadow while continuing to cover the native clock/date underneath.
+- Preserve the native-style hover highlight, fullscreen-game suppression, calendar, right-click details, Start with Windows and centered executable icon.
+
 ## 0.2.8 — 2026-08-22
 
 - Keep the exact total width from v0.2.7 while trimming a couple of extra pixels from the top edge so the block sits fully below the Windows 11 taskbar shadow.
