@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.2.10 — 2026-08-22
+
+- Remove the stacked v0.2.8 + v0.2.9 shell integrations so only one visibility/Z-order coordinator can interact with Explorer.
+- Replace the aggressive 12 ms guard with a single 35 ms guard plus native pre-hide handling.
+- Add DWM transition, Peek and Peek-exclusion protection to the taskbar overlay.
+- Register for Windows 11 cloak-state notifications and immediately clear shell cloaking while the taskbar should remain visible.
+- Replace event-based hover tracking with direct cursor-position polling so the Windows 11-style highlight cannot remain stuck after the pointer leaves.
+- Keep the fixed arrow/value/unit traffic renderers from v0.2.9 so rate changes never wrap or move the numeric value.
+- Improve taskbar colour sampling by taking a median across background bands instead of sampling only the Show desktop strip, which can itself be highlighted.
+- Add recovery-only shell diagnostics at `%LOCALAPPDATA%\IMC93Labs\SlimMonitorPC\shell-state.log` for any remaining Windows-specific hide/cloak transition.
+
 ## 0.2.9 — 2026-08-22
 
 - Sample the actual composited Windows taskbar colour from the uncovered Show desktop strip and apply that RGB value to the overlay instead of relying only on a fixed grey.
