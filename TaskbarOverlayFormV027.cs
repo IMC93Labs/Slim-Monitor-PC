@@ -108,7 +108,6 @@ public sealed class TaskbarOverlayFormV027 : Form
             control.ContextMenuStrip = _menu;
             control.MouseUp += ClickSurface_MouseUp;
         }
-
         _layout.ContextMenuStrip = _menu;
         _layout.MouseUp += ClickSurface_MouseUp;
         MouseUp += ClickSurface_MouseUp;
@@ -154,10 +153,6 @@ public sealed class TaskbarOverlayFormV027 : Form
 
     protected override void WndProc(ref Message m)
     {
-        // Windows "Show desktop" can minimize ordinary top-level windows. This
-        // compact taskbar surface must behave like shell chrome instead, so ignore
-        // explicit minimize system commands. The taskbar owner set below provides
-        // a second layer of protection without making this a child of the XAML bar.
         if (m.Msg == NativeMethods.WM_SYSCOMMAND &&
             (m.WParam.ToInt64() & 0xFFF0) == NativeMethods.SC_MINIMIZE)
         {
@@ -188,9 +183,6 @@ public sealed class TaskbarOverlayFormV027 : Form
         _layout.Padding = new Padding(4, 0, 3, 0);
         _layout.ColumnCount = 2;
         _layout.RowCount = 2;
-
-        // Keep the exact total width from v0.2.6, but give the rate column enough
-        // room for B/s, KB/s, MB/s and GB/s instead of clipping the unit suffix.
         _layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 47f));
         _layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 53f));
         _layout.RowStyles.Add(new RowStyle(SizeType.Percent, 50f));
@@ -388,7 +380,7 @@ public sealed class TaskbarOverlayFormV027 : Form
         var taskbar = NativeMethods.FindWindow("Shell_TrayWnd", null);
         if (taskbar == IntPtr.Zero ||
             !NativeMethods.IsWindowVisible(taskbar) ||
-            !TryGetTaskbarRect(taskbar, out var rect) ||
+            !TryGetVisibleTaskbarRect(taskbar, out var rect) ||
             !IsTaskbarOnScreen(rect))
         {
             HideOverlay();
@@ -398,10 +390,6 @@ public sealed class TaskbarOverlayFormV027 : Form
         EnsureTaskbarOwner(taskbar);
         _taskbarRect = rect;
 
-        // A normal maximized window stops at the work area and does not intersect
-        // the taskbar. A real borderless/fullscreen game covers almost all of the
-        // taskbar rectangle, so hide only for that concrete condition. This avoids
-        // the false hide/show transitions seen when Windows shows the desktop.
         if (IsForeignFullscreenCoveringTaskbar(taskbar, rect))
         {
             HideOverlay();
@@ -456,9 +444,6 @@ public sealed class TaskbarOverlayFormV027 : Form
         if (_taskbarOwner == taskbar)
             return;
 
-        // Keep this as a top-level popup so Windows 11 XAML cannot paint over it,
-        // but make the shell taskbar its owner so Show desktop does not treat it as
-        // an ordinary application window. This is intentionally NOT SetParent.
         NativeMethods.SetWindowLongPtr(Handle, NativeMethods.GWLP_HWNDPARENT, taskbar);
         _taskbarOwner = taskbar;
     }
@@ -467,13 +452,13 @@ public sealed class TaskbarOverlayFormV027 : Form
     {
         if (taskbar.Width < taskbar.Height)
         {
-            var verticalWidth = Math.Max(42, taskbar.Width - 4);
-            var verticalHeight = Math.Min(84, taskbar.Height - 8);
+            var verticalWidth = Math.Max(42, taskbar.Width - 2);
+            var verticalHeight = Math.Min(84, taskbar.Height - 4);
             NativeMethods.SetWindowPos(
                 Handle,
                 NativeMethods.HWND_TOPMOST,
                 taskbar.Left + Math.Max(0, (taskbar.Width - verticalWidth) / 2),
-                taskbar.Bottom - verticalHeight - 4,
+                taskbar.Bottom - verticalHeight - 2,
                 verticalWidth,
                 verticalHeight,
                 NativeMethods.SWP_NOACTIVATE);
@@ -482,14 +467,12 @@ public sealed class TaskbarOverlayFormV027 : Form
 
         var taskbarHeight = taskbar.Height;
         var showDesktopStrip = Math.Clamp(taskbarHeight / 8, 5, 9);
-
-        // Keep the width exactly in the v0.2.6 range that was approved visually.
         var width = Math.Clamp((int)Math.Round(taskbarHeight * 3.30), 150, 160);
 
-        // v0.2.6 used the complete taskbar height and protruded above the visible
-        // taskbar surface on the target PC. Leave only the native top separator
-        // uncovered, while still extending to the bottom so the old date is hidden.
-        var topInset = Math.Clamp(taskbarHeight / 14, 3, 4);
+        // The visible taskbar rectangle is derived from Screen.WorkingArea rather
+        // than the larger transparent Shell_TrayWnd composition bounds. Keep only
+        // the 1 px top separator visible and cover the rest, including the old date.
+        var topInset = taskbarHeight > 32 ? 1 : 0;
         var height = Math.Max(30, taskbarHeight - topInset);
         var x = Math.Max(taskbar.Left, taskbar.Right - showDesktopStrip - width);
         var y = taskbar.Top + topInset;
@@ -517,14 +500,51 @@ public sealed class TaskbarOverlayFormV027 : Form
         return NativeMethods.GetAncestor(hit, NativeMethods.GA_ROOT) == Handle;
     }
 
-    private static bool TryGetTaskbarRect(IntPtr taskbar, out Rectangle rect)
+    private static bool TryGetVisibleTaskbarRect(IntPtr taskbar, out Rectangle rect)
     {
         rect = Rectangle.Empty;
         if (!NativeMethods.GetWindowRect(taskbar, out var native))
             return false;
 
-        rect = Rectangle.FromLTRB(native.Left, native.Top, native.Right, native.Bottom);
-        return rect.Width > 0 && rect.Height > 0;
+        var shellRect = Rectangle.FromLTRB(native.Left, native.Top, native.Right, native.Bottom);
+        if (shellRect.Width <= 0 || shellRect.Height <= 0)
+            return false;
+
+        var screen = Screen.FromRectangle(shellRect);
+        var bounds = screen.Bounds;
+        var work = screen.WorkingArea;
+
+        // WorkingArea gives the real visible taskbar boundary on Windows 11. The
+        // Shell_TrayWnd rectangle can include a large transparent composition area
+        // above the actual bar, which caused v0.2.6 to protrude upward.
+        if (work.Bottom < bounds.Bottom)
+        {
+            rect = Rectangle.FromLTRB(bounds.Left, work.Bottom, bounds.Right, bounds.Bottom);
+            return rect.Height > 0;
+        }
+
+        if (work.Top > bounds.Top)
+        {
+            rect = Rectangle.FromLTRB(bounds.Left, bounds.Top, bounds.Right, work.Top);
+            return rect.Height > 0;
+        }
+
+        if (work.Right < bounds.Right)
+        {
+            rect = Rectangle.FromLTRB(work.Right, bounds.Top, bounds.Right, bounds.Bottom);
+            return rect.Width > 0;
+        }
+
+        if (work.Left > bounds.Left)
+        {
+            rect = Rectangle.FromLTRB(bounds.Left, bounds.Top, work.Left, bounds.Bottom);
+            return rect.Width > 0;
+        }
+
+        // Auto-hide does not reserve WorkingArea. Fall back to the shell rectangle;
+        // IsTaskbarOnScreen will reject it when Explorer has moved it off-screen.
+        rect = shellRect;
+        return true;
     }
 
     private static bool IsTaskbarOnScreen(Rectangle taskbarRect)
