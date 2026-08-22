@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.2.8 — 2026-08-22
+
+- Keep the exact total width from v0.2.7 while trimming a couple of extra pixels from the top edge so the block sits fully below the Windows 11 taskbar shadow.
+- Preserve bottom-edge coverage so the native Windows clock/date remains completely hidden underneath.
+- Rebalance the internal columns and rate font so the complete `B/s`, `KB/s`, `MB/s` and `GB/s` suffix stays visible without widening the block.
+- Add a rounded Windows 11-style hover highlight matching the nearby tray controls.
+- Add a native `WM_WINDOWPOSCHANGING` guard that rejects transient hide/reorder requests caused by **Show desktop** while the taskbar remains visible.
+- Add a fast 35 ms visibility/Z-order guard to recover unexpected shell transitions before they become visibly noticeable.
+- Tighten fullscreen detection and explicitly ignore desktop/Explorer shell windows so real fullscreen games can still hide the monitor without treating **Show desktop** as fullscreen.
+
 ## 0.2.7 — 2026-08-22
 
 - Keep the exact total width from v0.2.6 while lowering the block a few pixels so it stays inside the visible taskbar.
