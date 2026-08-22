@@ -1,28 +1,38 @@
-# Slim Monitor PC v0.2.9
+# Slim Monitor PC v0.2.10
 
-Pixel-level Windows 11 integration refinement based on the latest real-system testing.
+Windows 11 shell-stability update based on frame-by-frame review of the latest real-system recording.
 
-## Taskbar colour matching
+## Show desktop / flicker
 
-- The overlay no longer relies only on a fixed dark/light grey.
-- It samples the real composited taskbar colour from the uncovered **Show desktop** strip and applies that exact RGB value to the block.
-- This follows Windows tint/transparency changes and makes the normal, non-hover state blend much more closely with the native taskbar.
+- Removes the stacked v0.2.8 + v0.2.9 shell guards. Two independent fast timers were both trying to repair Z-order/visibility and could fight Explorer, which explains why v0.2.9 could look worse despite using a faster 12 ms guard.
+- Uses one 35 ms coordinator instead of competing 35 ms + 12 ms guards.
+- Adds DWM protections for forced transitions, Peek and Peek exclusion.
+- Registers for Windows 11 cloak-state notifications and immediately clears shell cloaking when the taskbar should still be visible.
+- Keeps the existing pre-hide `WM_WINDOWPOSCHANGING` protection and minimize rejection in the same single integration layer.
+- Genuine fullscreen games/apps still hide the monitor normally.
+- Writes recovery-only diagnostics to `%LOCALAPPDATA%\IMC93Labs\SlimMonitorPC\shell-state.log` if Windows still tries to hide/cloak/minimize the block, so any remaining shell-specific case can be identified instead of guessed.
 
-## Stable traffic text
+## Hover
 
-- Download/upload are now rendered in fixed arrow/value/unit cells instead of one wrapping label.
-- `B/s`, `KB/s`, `MB/s` and `GB/s` keep a dedicated unit column, so changing scale cannot push text onto another row.
-- Numeric values stay right-aligned against the same unit position, preventing the visible left/right movement seen when the scale changes.
-- The clock/date column receives the remaining width so the full date remains readable without changing the approved overall block width.
+- Replaces MouseEnter/MouseLeave state tracking with direct cursor-position polling.
+- The Windows 11-style highlight is now active only while the pointer is physically inside the monitor bounds, so it cannot remain stuck after the pointer leaves.
 
-## Show desktop refinement
+## Traffic text
 
-- Adds an immediate `VisibleChanged`/minimize recovery path on top of the v0.2.8 native window-position guard.
-- Runs a short 12 ms shell-transition guard while the taskbar should be visible, reducing the remaining single-frame flash when **Show desktop** is used.
-- Genuine fullscreen applications still suppress the overlay instead of forcing it over a game.
+- Keeps the fixed arrow/value/unit cells introduced in v0.2.9.
+- `B/s`, `KB/s`, `MB/s` and `GB/s` remain on one line and the numeric values stay anchored without movement.
 
-## Visual fit
+## Taskbar colour
 
-- Keeps the v0.2.8 width unchanged.
-- Clips only two additional pixels from the top visual region so the block remains below the Windows 11 shadow while continuing to cover the native clock/date underneath.
-- Preserves the Windows 11-style hover highlight, calendar, right-click details, Start with Windows, centered executable icon and single-file packaging.
+- Keeps real taskbar colour sampling, but now samples robust background bands across the taskbar instead of depending on the far-right Show desktop strip, which can itself be highlighted during interaction.
+
+## Preserved
+
+- Approved block width and vertical fit.
+- Larger clock/date.
+- Built-in calendar.
+- Right-click network/session details.
+- Start with Windows.
+- Centered executable icon.
+- Single-file, self-contained Windows x64 executable.
+- Startup self-test and embedded-icon validation in CI.
