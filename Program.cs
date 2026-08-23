@@ -35,6 +35,7 @@ internal static class Program
                 using var safeRefinement = TaskbarV0211SafeRefinement.Attach(form, integration);
                 using var ownerlessTopmost = TaskbarV0216OwnerlessTopmost.Attach(form);
                 using var showDesktopGuard = TaskbarV0217ShowDesktopGuard.Attach(form);
+                using var customShowDesktop = TaskbarV0220CustomShowDesktop.Attach(form);
                 _ = form.Handle;
                 return;
             }
@@ -47,6 +48,7 @@ internal static class Program
             using var v0211SafeRefinement = TaskbarV0211SafeRefinement.Attach(mainForm, v028Integration);
             using var v0216OwnerlessTopmost = TaskbarV0216OwnerlessTopmost.Attach(mainForm);
             using var v0217ShowDesktopGuard = TaskbarV0217ShowDesktopGuard.Attach(mainForm);
+            using var v0220CustomShowDesktop = TaskbarV0220CustomShowDesktop.Attach(mainForm);
             Application.Run(mainForm);
         }
         catch (Exception ex)
