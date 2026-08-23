@@ -30,10 +30,13 @@ internal static class Program
 
             if (selfTest)
             {
+                // CI startup smoke test deliberately avoids creating the passive taskbar
+                // mirror because there is no interactive Explorer/taskbar session or
+                // WinForms message loop on the headless runner. Compilation still covers
+                // TaskbarV0218FlashMirror; the real attachment is runtime-only by design.
                 using var form = new TaskbarOverlayFormV027();
                 using var integration = TaskbarV028Integration.Attach(form);
                 using var safeRefinement = TaskbarV0211SafeRefinement.Attach(form, integration);
-                using var flashMirror = TaskbarV0218FlashMirror.Attach(form);
                 _ = form.Handle;
                 return;
             }
