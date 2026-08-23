@@ -1,23 +1,26 @@
-# Slim Monitor PC v0.2.16
+# Slim Monitor PC v0.2.17
 
-Focused only on the remaining Windows 11 **Show desktop** flash seen in the latest real-machine recording.
+Focused only on the remaining Windows 11 **Show desktop** flash reproduced again in the latest real-machine recording.
 
-## Root-cause change
+## Root cause addressed
 
-- Removes the v0.2.15 DWM Peek/transition experiment from the runtime path.
-- Keeps Slim Monitor PC as an independent top-level window instead of assigning `Shell_TrayWnd` as its owner.
-- Explicitly establishes the overlay as `HWND_TOPMOST` on handle creation without activating it.
-- The legacy taskbar state code is prevented from reassigning Explorer/taskbar ownership.
+- The base overlay owns a 200 ms shell timer that calls `MaintainShellState()`.
+- That method deliberately calls `SW_HIDE` when it believes a foreign fullscreen window covers the taskbar.
+- During **Show desktop**, Windows temporarily foregrounds shell/desktop surfaces. On the real machine this can overlap the same fullscreen heuristic and make Slim Monitor PC hide itself, then reappear on a later timer tick — exactly the short native-clock flash visible in the recordings.
 
-Microsoft documents that Show desktop raises the desktop in the Z-order while topmost windows continue to cover it. Microsoft also documents that owned windows are coupled to their owner's visibility/minimize state. This release removes that unnecessary ownership relationship rather than trying to recover the overlay after the flash has already occurred.
+## v0.2.17 change
+
+- Replaces only that legacy 200 ms shell-timer cadence; the interval is not made faster.
+- While the foreground is the Windows desktop/shell (`GetShellWindow`, `Progman`, `WorkerW`, taskbar or known Windows 11 shell bridge/input-site surfaces), the already-visible overlay is left untouched.
+- For normal applications and genuine fullscreen games, the exact existing `MaintainShellState()` implementation continues to run, preserving fullscreen-game hiding.
+- Uses documented `GetShellWindow`, `GetClassName`, `GetAncestor` and `GetWindowThreadProcessId` APIs only.
 
 ## Explicitly unchanged
 
 - No global mouse/keyboard hooks.
-- No Explorer/taskbar subclassing or injection.
-- No DWM cloak manipulation.
-- No new timers or faster polling.
+- No Explorer/taskbar injection or subclassing.
+- No DWM cloak/Peek manipulation.
 - No custom Show desktop implementation.
-- No changes to size, colour, layout, hover, text, network measurement or calendar.
+- No visual, colour, size, layout, hover, traffic text, network measurement or calendar changes.
 
 Single-file, self-contained Windows x64 build with startup self-test and embedded-icon validation remains unchanged.
