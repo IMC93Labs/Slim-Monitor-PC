@@ -5,6 +5,7 @@
     <UseWindowsForms>true</UseWindowsForms>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
     <ApplicationIcon>Assets\app.generated.ico</ApplicationIcon>
     <AssemblyName>SlimMonitorPC</AssemblyName>
     <RootNamespace>SlimMonitorPC</RootNamespace>
@@ -16,12 +17,17 @@
     <PublishTrimmed>false</PublishTrimmed>
     <DebugType>none</DebugType>
     <DebugSymbols>false</DebugSymbols>
-    <Version>0.2.20</Version>
-    <AssemblyVersion>0.2.20.0</AssemblyVersion>
-    <FileVersion>0.2.20.0</FileVersion>
+    <Version>1.0.0-rc1</Version>
+    <AssemblyVersion>1.0.0.0</AssemblyVersion>
+    <FileVersion>1.0.0.0</FileVersion>
+    <InformationalVersion>1.0.0-rc1</InformationalVersion>
     <Product>Slim Monitor PC</Product>
-    <Description>Wi-Fi traffic meter aligned with the Windows taskbar clock and calendar area.</Description>
+    <Description>Wi-Fi traffic meter structurally docked to the Windows taskbar.</Description>
     <Company>IMC93Labs</Company>
     <Authors>IMC93Labs</Authors>
   </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="src\*.cs" />
+  </ItemGroup>
 </Project>

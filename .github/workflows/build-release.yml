@@ -31,6 +31,42 @@ jobs:
           "version=$version" >> $env:GITHUB_OUTPUT
           "tag=v$version" >> $env:GITHUB_OUTPUT
 
+      - name: Verify clean rewrite architecture
+        shell: pwsh
+        run: |
+          $project = Get-Content SlimMonitorPC.csproj -Raw
+          if ($project -notmatch '<EnableDefaultCompileItems>false</EnableDefaultCompileItems>') {
+            throw 'Legacy source compilation is not disabled.'
+          }
+          if ($project -notmatch '<Compile Include="src\\\*\.cs"') {
+            throw 'The project is not restricted to the clean src/*.cs rewrite.'
+          }
+
+          $source = (Get-ChildItem src -Filter *.cs | Get-Content -Raw) -join "`n"
+          $banned = @(
+            'SetParent(',
+            'SetWindowsHookEx',
+            'WH_MOUSE_LL',
+            'WH_KEYBOARD_LL',
+            'DwmSetWindowAttribute',
+            'ShowWindowAsync',
+            'EnumWindows('
+          )
+          foreach ($token in $banned) {
+            if ($source.Contains($token)) {
+              throw "Banned legacy/shell-interference primitive found in clean rewrite: $token"
+            }
+          }
+
+          $dock = Get-Content src\TaskbarDockController.cs -Raw
+          $topmostSeats = ([regex]::Matches($dock, 'NativeMethods\.HWND_TOPMOST')).Count
+          if ($topmostSeats -ne 1) {
+            throw "Expected exactly one HWND_TOPMOST seating path, found $topmostSeats."
+          }
+          if (-not $dock.Contains('NativeMethods.SWP_NOZORDER')) {
+            throw 'Steady-state geometry path must explicitly preserve Z-order.'
+          }
+
       - name: Generate application icon
         shell: pwsh
         run: .\generate-icon.ps1
