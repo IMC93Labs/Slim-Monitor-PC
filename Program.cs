@@ -33,7 +33,7 @@ internal static class Program
                 using var form = new TaskbarOverlayFormV027();
                 using var integration = TaskbarV028Integration.Attach(form);
                 using var safeRefinement = TaskbarV0211SafeRefinement.Attach(form, integration);
-                using var flickerGuard = TaskbarV0215FlickerGuard.Attach(form);
+                using var ownerlessTopmost = TaskbarV0216OwnerlessTopmost.Attach(form);
                 _ = form.Handle;
                 return;
             }
@@ -44,7 +44,7 @@ internal static class Program
             using var mainForm = new TaskbarOverlayFormV027();
             using var v028Integration = TaskbarV028Integration.Attach(mainForm);
             using var v0211SafeRefinement = TaskbarV0211SafeRefinement.Attach(mainForm, v028Integration);
-            using var v0215FlickerGuard = TaskbarV0215FlickerGuard.Attach(mainForm);
+            using var v0216OwnerlessTopmost = TaskbarV0216OwnerlessTopmost.Attach(mainForm);
             Application.Run(mainForm);
         }
         catch (Exception ex)
